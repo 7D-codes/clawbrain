@@ -3,7 +3,9 @@
  * 
  * Handles connection to OpenClaw Gateway with:
  * - Auto-reconnect with exponential backoff
- * - Auth with Gateway password (new protocol v3)
+ * - Auth with Gateway password (Protocol v3)
+ * - Device identity with RSA keypair generation
+ * - Challenge signing for non-loopback connections
  * - Session management (clawbrain:main:main)
  * - Message streaming support
  * - Detailed connection diagnostics
@@ -15,6 +17,8 @@ import { useChatStore } from '@/stores/chat-store';
 // Gateway connection configuration
 const SESSION_KEY = 'clawbrain:main:main';
 const PROTOCOL_VERSION = 3;
+const DEVICE_KEY_STORAGE_KEY = 'clawbrain_device_keys';
+const DEVICE_TOKEN_STORAGE_KEY = 'clawbrain_device_token';
 
 // Get gateway URL from localStorage or env/default
 function getGatewayUrl(): string {
@@ -39,8 +43,224 @@ function generateReqId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Test full connection including auth (new protocol v3)
-function testFullConnection(
+// Device keypair interface
+interface DeviceKeyPair {
+  id: string;
+  publicKey: string; // PEM format
+  privateKey: CryptoKey; // Web Crypto API key object
+  createdAt: number;
+}
+
+// Stored device keys (serializable)
+interface StoredDeviceKeys {
+  id: string;
+  publicKey: string; // PEM format
+  privateKeyJwk: JsonWebKey; // Exportable private key
+  createdAt: number;
+}
+
+// Generate a unique device ID
+function generateDeviceId(): string {
+  const stored = typeof window !== 'undefined' ? localStorage.getItem('clawbrain_device_id') : null;
+  if (stored) return stored;
+  
+  const id = `clawbrain-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('clawbrain_device_id', id);
+  }
+  return id;
+}
+
+// Get device ID
+function getDeviceId(): string {
+  return generateDeviceId();
+}
+
+// Convert ArrayBuffer to Base64
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// Convert Base64 to ArrayBuffer
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+// Export public key to PEM format
+async function exportPublicKeyToPEM(publicKey: CryptoKey): Promise<string> {
+  const exported = await crypto.subtle.exportKey('spki', publicKey);
+  const base64 = arrayBufferToBase64(exported);
+  // Format as PEM with line breaks every 64 characters
+  const lines = base64.match(/.{1,64}/g) || [];
+  return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----`;
+}
+
+// Import public key from PEM format
+async function importPublicKeyFromPEM(pem: string): Promise<CryptoKey> {
+  const base64 = pem
+    .replace('-----BEGIN PUBLIC KEY-----', '')
+    .replace('-----END PUBLIC KEY-----', '')
+    .replace(/\s/g, '');
+  const buffer = base64ToArrayBuffer(base64);
+  return crypto.subtle.importKey(
+    'spki',
+    buffer,
+    { name: 'RSA-PSS', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+}
+
+// Generate new RSA keypair for device identity
+async function generateDeviceKeyPair(): Promise<DeviceKeyPair> {
+  const keyPair = await crypto.subtle.generateKey(
+    {
+      name: 'RSA-PSS',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true, // exportable
+    ['sign', 'verify']
+  );
+
+  const publicKeyPEM = await exportPublicKeyToPEM(keyPair.publicKey);
+  
+  return {
+    id: getDeviceId(),
+    publicKey: publicKeyPEM,
+    privateKey: keyPair.privateKey,
+    createdAt: Date.now(),
+  };
+}
+
+// Save device keys to localStorage
+async function saveDeviceKeys(keyPair: DeviceKeyPair): Promise<void> {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+    const stored: StoredDeviceKeys = {
+      id: keyPair.id,
+      publicKey: keyPair.publicKey,
+      privateKeyJwk,
+      createdAt: keyPair.createdAt,
+    };
+    localStorage.setItem(DEVICE_KEY_STORAGE_KEY, JSON.stringify(stored));
+  } catch (err) {
+    debugLog('Failed to save device keys:', err);
+  }
+}
+
+// Load device keys from localStorage
+async function loadDeviceKeys(): Promise<DeviceKeyPair | null> {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const stored = localStorage.getItem(DEVICE_KEY_STORAGE_KEY);
+    if (!stored) return null;
+    
+    const parsed: StoredDeviceKeys = JSON.parse(stored);
+    
+    // Import the private key
+    const privateKey = await crypto.subtle.importKey(
+      'jwk',
+      parsed.privateKeyJwk,
+      { name: 'RSA-PSS', hash: 'SHA-256' },
+      true,
+      ['sign']
+    );
+    
+    return {
+      id: parsed.id,
+      publicKey: parsed.publicKey,
+      privateKey,
+      createdAt: parsed.createdAt,
+    };
+  } catch (err) {
+    debugLog('Failed to load device keys:', err);
+    return null;
+  }
+}
+
+// Get or create device keypair
+async function getDeviceKeyPair(): Promise<DeviceKeyPair | null> {
+  try {
+    // Try to load existing keys
+    let keyPair = await loadDeviceKeys();
+    if (keyPair) {
+      debugLog('Loaded existing device keypair');
+      return keyPair;
+    }
+    
+    // Generate new keys
+    debugLog('Generating new device keypair...');
+    keyPair = await generateDeviceKeyPair();
+    await saveDeviceKeys(keyPair);
+    debugLog('Device keypair generated and saved');
+    return keyPair;
+  } catch (err) {
+    debugLog('Crypto not available, falling back to no device auth:', err);
+    return null;
+  }
+}
+
+// Sign a challenge nonce with the device private key
+async function signChallenge(privateKey: CryptoKey, nonce: string): Promise<string | null> {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(nonce);
+    
+    const signature = await crypto.subtle.sign(
+      {
+        name: 'RSA-PSS',
+        saltLength: 32,
+      },
+      privateKey,
+      data
+    );
+    
+    return arrayBufferToBase64(signature);
+  } catch (err) {
+    debugLog('Failed to sign challenge:', err);
+    return null;
+  }
+}
+
+// Store device token for future reconnects
+function storeDeviceToken(token: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+  }
+}
+
+// Get stored device token
+function getStoredDeviceToken(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  }
+  return null;
+}
+
+// Clear device token (on auth failure)
+function clearDeviceToken(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
+  }
+}
+
+// Test full connection including auth (Protocol v3 with device identity)
+async function testFullConnection(
   url: string, 
   password: string
 ): Promise<{ 
@@ -49,7 +269,7 @@ function testFullConnection(
   error?: string;
   details?: string;
 }> {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     let stage: 'connect' | 'auth' | 'success' = 'connect';
     let ws: WebSocket | null = null;
     let connectReqId: string | null = null;
@@ -75,7 +295,7 @@ function testFullConnection(
         // Wait for connect.challenge event
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         try {
           const data = JSON.parse(event.data);
           
@@ -85,7 +305,40 @@ function testFullConnection(
             challengeNonce = data.payload.nonce;
             connectReqId = generateReqId();
             
-            // Send connect request with new protocol
+            // Get device keypair for signing
+            const deviceKeyPair = await getDeviceKeyPair();
+            
+            // Sign the challenge if we have keys
+            let signature: string | undefined;
+            let publicKey: string | undefined;
+            let signedAt: number | undefined;
+            
+            if (deviceKeyPair && challengeNonce) {
+              const sig = await signChallenge(deviceKeyPair.privateKey, challengeNonce);
+              if (sig) {
+                signature = sig;
+                publicKey = deviceKeyPair.publicKey;
+                signedAt = Date.now();
+              }
+            }
+            
+            // Build device object
+            const device: {
+              id: string;
+              nonce: string | null;
+              publicKey?: string;
+              signature?: string;
+              signedAt?: number;
+            } = {
+              id: deviceKeyPair?.id || getDeviceId(),
+              nonce: challengeNonce,
+            };
+            
+            if (publicKey) device.publicKey = publicKey;
+            if (signature) device.signature = signature;
+            if (signedAt) device.signedAt = signedAt;
+            
+            // Send connect request with protocol v3
             const connectMessage = {
               type: 'req',
               id: connectReqId,
@@ -106,13 +359,11 @@ function testFullConnection(
                 permissions: {},
                 auth: { 
                   token: password,
+                  deviceToken: getStoredDeviceToken(),
                 },
                 locale: 'en-US',
                 userAgent: 'clawbrain/1.0.0',
-                device: {
-                  id: `clawbrain-test-${Date.now()}`,
-                  nonce: challengeNonce,
-                },
+                device,
               },
             };
             ws?.send(JSON.stringify(connectMessage));
@@ -124,14 +375,29 @@ function testFullConnection(
             ws?.close();
             
             if (data.ok) {
+              // Store device token if provided
+              const payload = data.payload as {auth?: {deviceToken?: string}} | undefined;
+              if (payload?.auth?.deviceToken) {
+                storeDeviceToken(payload.auth.deviceToken);
+              }
               resolve({ success: true, stage: 'success' });
             } else {
+              // Clear device token on auth failure
+              clearDeviceToken();
               resolve({ 
                 success: false, 
                 stage: 'auth', 
                 error: `Auth failed: ${data.error?.message || 'Unknown error'}`,
-                details: 'The gateway rejected the password. Check your password in settings.'
+                details: 'The gateway rejected the authentication. Check your password in settings.'
               });
+            }
+          }
+          
+          // Handle hello-ok event (alternative auth success)
+          else if (data.type === 'event' && data.event === 'hello-ok') {
+            const payload = data.payload as {auth?: {deviceToken?: string}} | undefined;
+            if (payload?.auth?.deviceToken) {
+              storeDeviceToken(payload.auth.deviceToken);
             }
           }
           
@@ -252,6 +518,7 @@ interface WebSocketState {
   messageQueue: string[];
   connectionState: ConnectionState;
   lastError: string | null;
+  deviceKeyPair: DeviceKeyPair | null;
 }
 
 class GatewayWebSocketClient {
@@ -264,6 +531,7 @@ class GatewayWebSocketClient {
     messageQueue: [],
     connectionState: 'idle',
     lastError: null,
+    deviceKeyPair: null,
   };
 
   private password: string | null = null;
@@ -273,6 +541,13 @@ class GatewayWebSocketClient {
   private stateListeners: Set<(state: ConnectionState) => void> = new Set();
   private messageListeners: Set<(data: GatewayResponse) => void> = new Set();
   private errorListeners: Set<(error: string) => void> = new Set();
+
+  // Initialize device keys on first use
+  private async initDeviceKeys(): Promise<void> {
+    if (!this.state.deviceKeyPair) {
+      this.state.deviceKeyPair = await getDeviceKeyPair();
+    }
+  }
 
   // Get current connection status
   isConnected(): boolean {
@@ -327,6 +602,9 @@ class GatewayWebSocketClient {
     this.challengeNonce = null;
     this.setConnectionState('connecting');
     this.notifyListeners();
+    
+    // Initialize device keys
+    this.initDeviceKeys();
 
     const url = getGatewayUrl();
     debugLog(`Connecting to ${url}...`);
@@ -371,7 +649,7 @@ class GatewayWebSocketClient {
   }
 
   // Send connect request after receiving challenge
-  private sendConnectRequest(): void {
+  private async sendConnectRequest(): Promise<void> {
     if (!this.state.ws || this.state.ws.readyState !== WebSocket.OPEN) {
       debugLog('Cannot send connect - WebSocket not open');
       return;
@@ -380,8 +658,42 @@ class GatewayWebSocketClient {
     this.connectReqId = generateReqId();
     const password = this.getPassword();
     
-    // Build device identity
-    const deviceId = `clawbrain-${Date.now()}`;
+    // Ensure device keys are initialized
+    await this.initDeviceKeys();
+    
+    // Build device identity with challenge signing
+    const deviceKeyPair = this.state.deviceKeyPair;
+    
+    // Sign the challenge if we have keys and a nonce
+    let signature: string | undefined;
+    let publicKey: string | undefined;
+    let signedAt: number | undefined;
+    
+    if (deviceKeyPair && this.challengeNonce) {
+      const sig = await signChallenge(deviceKeyPair.privateKey, this.challengeNonce);
+      if (sig) {
+        signature = sig;
+        publicKey = deviceKeyPair.publicKey;
+        signedAt = Date.now();
+      }
+    }
+    
+    // Build device object
+    const device: {
+      id: string;
+      nonce: string | null;
+      publicKey?: string;
+      signature?: string;
+      signedAt?: number;
+    } = {
+      id: deviceKeyPair?.id || getDeviceId(),
+      nonce: this.challengeNonce,
+    };
+    
+    // Add optional fields only if present
+    if (publicKey) device.publicKey = publicKey;
+    if (signature) device.signature = signature;
+    if (signedAt) device.signedAt = signedAt;
     
     const connectMessage: GatewayMessage = {
       type: 'req',
@@ -403,15 +715,11 @@ class GatewayWebSocketClient {
         permissions: {},
         auth: { 
           token: password,
-          // For local loopback connections, we can use password as token
-          // For remote, we'd need proper device token
+          deviceToken: getStoredDeviceToken(),
         },
         locale: 'en-US',
         userAgent: 'clawbrain/1.0.0',
-        device: {
-          id: deviceId,
-          nonce: this.challengeNonce,
-        },
+        device,
       },
     };
 
@@ -492,6 +800,12 @@ class GatewayWebSocketClient {
 
       case 'hello-ok':
         debugLog('Received hello-ok event');
+        // Store device token if provided
+        const payload = data.payload as {auth?: {deviceToken?: string}} | undefined;
+        if (payload?.auth?.deviceToken) {
+          storeDeviceToken(payload.auth.deviceToken);
+          debugLog('Device token stored from hello-ok');
+        }
         break;
 
       default:
@@ -517,13 +831,28 @@ class GatewayWebSocketClient {
         // Store device token if provided
         const payload = data.payload as {auth?: {deviceToken?: string}} | undefined;
         if (payload?.auth?.deviceToken) {
-          debugLog('Received device token');
-          // Could store for future connections
+          storeDeviceToken(payload.auth.deviceToken);
+          debugLog('Device token stored from connect response');
         }
       } else {
         debugLog('Connect failed:', data.error);
         this.state.isAuthenticated = false;
-        this.handleError(`Authentication failed: ${data.error?.message || 'Unknown error'}`);
+        
+        // Clear device token on auth failure
+        clearDeviceToken();
+        
+        // Check if it's a device auth failure
+        const errorMsg = data.error?.message || 'Unknown error';
+        if (errorMsg.includes('device') || errorMsg.includes('signature')) {
+          debugLog('Device auth failed, clearing keys for regeneration');
+          // Clear device keys so they'll be regenerated
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(DEVICE_KEY_STORAGE_KEY);
+          }
+          this.state.deviceKeyPair = null;
+        }
+        
+        this.handleError(`Authentication failed: ${errorMsg}`);
         // Don't reconnect on auth error
         this.disconnect();
       }
