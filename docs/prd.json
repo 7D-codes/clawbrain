@@ -58,7 +58,7 @@
       "Cards as wireframe boxes with clear hierarchy",
       "Real-time updates from file watcher"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {
@@ -102,7 +102,7 @@
       "Handles file creation, modification, deletion",
       "Memory-efficient watching"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {

@@ -1,71 +1,66 @@
-[2026-02-05] Agent B - Backend API Developer
+// Progress log for ClawBrain project
 
-## Completed: CB-003 + CB-008 - File System API with Security
+## 2026-02-05 - Agent D
 
-### Files Created:
+### Completed: CB-004 + CB-007 - Kanban Board + File Sync
 
-1. **src/lib/security.ts** (3.7 KB)
-   - SANDBOX_ROOT constant pointing to ~/clawdbrain/
-   - `sanitizePath()` - Path traversal protection
-   - `isValidUUID()` - UUID validation for task IDs
-   - `getTaskPath()` - Safe task file path resolution
-   - `validateContent()` - Content sanitization (null byte detection, size limits)
-   - `PathValidationError` - Custom error class with error codes
+**Deliverables created:**
 
-2. **src/lib/file-store.ts** (10 KB)
-   - `listTasks()` - List all tasks with sorting by updated date
-   - `getTask()` - Get single task by ID
-   - `createTask()` - Create new task with auto-generated UUID
-   - `updateTask()` - Update task with timestamp-based conflict detection
-   - `deleteTask()` - Delete task by ID
-   - `atomicWriteFile()` - Atomic write pattern (temp → rename → fsync)
-   - YAML frontmatter parsing/serialization
-   - Task interface and types
-   - FileStoreError with HTTP status codes
+1. **`src/stores/task-store.ts`** - Zustand store for task management
+   - Task type definitions with TaskStatus (todo, in-progress, done)
+   - Store state with tasks, loading states, error handling
+   - Actions: loadTasks, updateTask, createTask, deleteTask, selectTask
+   - Helper function parseTaskFile for parsing markdown frontmatter
+   - Persist middleware for local state persistence
+   - getTasksByStatus selector for kanban columns
 
-3. **src/app/api/tasks/route.ts** (5 KB)
-   - GET /api/tasks - List all tasks with pagination, status/project filters
-   - POST /api/tasks - Create new task with Zod validation
-   - Returns 201 with Location header on create
-   - Query params: page, limit, status, project
+2. **`src/lib/file-watcher.ts`** - File watching with chokidar
+   - useFileWatcher hook for client-side file watching
+   - Debounce utility (300ms as per requirements)
+   - createFileWatcher for server-side chokidar integration
+   - useInitializeFileWatcher hook for component initialization
+   - Fallback polling mechanism for browser environment
 
-4. **src/app/api/tasks/[id]/route.ts** (5 KB)
-   - GET /api/tasks/[id] - Get single task
-   - PATCH /api/tasks/[id] - Partial update task
-   - DELETE /api/tasks/[id] - Delete task
-   - UUID validation on all routes
-   - Zod validation for update operations
+3. **`src/components/kanban/KanbanBoard.tsx`** - Main kanban board
+   - DndContext with PointerSensor and KeyboardSensor
+   - Three columns: To Do, In Progress, Done
+   - Drag and drop between columns
+   - Calls PATCH /api/tasks/[id] on status change
+   - Loading and error states with wireframe styling
+   - Status bar showing task counts
+   - Real-time updates from file watcher integration
 
-### Security Features:
+4. **`src/components/kanban/KanbanColumn.tsx`** - Kanban columns
+   - Droppable column areas
+   - SortableContext for task cards
+   - Column headers with status indicators
+   - Empty state placeholder
+   - Mono wireframe grid styling
 
-- ✅ Sandboxed to ~/clawdbrain/ only
-- ✅ Path traversal protection (rejects ../, absolute paths)
-- ✅ UUID-only task IDs (prevents directory traversal via IDs)
-- ✅ Atomic writes (write to .tmp file → fsync → rename)
-- ✅ Conflict detection via timestamps (updated field auto-refreshed)
-- ✅ Proper error handling with 400, 403, 404, 500 status codes
-- ✅ Content validation (null byte injection protection)
-- ✅ Size limits (10MB default for content)
+5. **`src/components/kanban/TaskCard.tsx`** - Draggable task cards
+   - useSortable hook for drag functionality
+   - Visual feedback during drag (scale, border change)
+   - Status indicator bar and dot
+   - Title, description (truncated), project, and date
+   - Drag handle indicator on hover
+   - Wireframe box styling with sharp corners
 
-### API Response Codes:
+**Design implementation:**
+- Mono wireframe grid aesthetic as specified in DESIGN.md
+- Sharp corners (rounded-none / 0 radius)
+- 1px borders throughout, no shadows
+- Cards as wireframe boxes with clear hierarchy
+- Space Grotesk font family (via CSS classes)
+- Pure monochrome color palette (neutral grays only)
+- 8px grid alignment system
 
-- 200: Success (GET, DELETE)
-- 201: Created (POST with Location header)
-- 400: Bad Request (invalid JSON, validation errors, invalid UUID)
-- 403: Forbidden (path traversal attempt)
-- 404: Not Found (task doesn't exist)
-- 500: Internal Server Error
+**Dependencies:**
+- @dnd-kit/core and @dnd-kit/sortable for drag and drop
+- zustand for state management
+- chokidar for file watching
 
-### Dependencies Used:
-
-- uuid (v4) - For generating task IDs
-- zod - For request validation
-- fs/promises - For atomic file operations
-- path, os - For sandbox path resolution
-
-### Notes:
-
-- All file operations use the atomic write pattern to prevent corruption
-- Tasks are stored as markdown files with YAML frontmatter
-- Last-write-wins strategy implemented for MVP (timestamp-based)
-- Pagination defaults: page=1, limit=50, max=100
+**Integration notes:**
+- KanbanBoard initializes file watcher on mount
+- Drag operations optimistically update local state
+- API calls made on drag end to persist changes
+- File watcher refreshes task list when files change
