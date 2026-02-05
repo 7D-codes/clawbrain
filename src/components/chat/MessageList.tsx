@@ -213,11 +213,8 @@ function AssistantContent({ content }: { content: string }) {
 }
 
 function QuickPrompt({ text }: { text: string }) {
-  const { sendMessage } = useChatStore();
-
   const handleClick = () => {
-    // Get the sendMessage action from the gateway hook
-    // This will be handled by the parent component
+    // Dispatch custom event to be handled by parent component
     const event = new CustomEvent('quickPrompt', { detail: text });
     window.dispatchEvent(event);
   };

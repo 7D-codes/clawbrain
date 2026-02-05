@@ -148,3 +148,113 @@
 - Auto-scroll keeps view at bottom
 - Quick prompts dispatch custom events
 - Input disabled when not connected
+
+## 2026-02-05 - Agent E
+
+### Completed: CB-009 + CB-010 + CB-011 - Layout, Onboarding, Error Handling
+
+**Deliverables created:**
+
+1. **`src/app/layout.tsx`** - Root layout with fonts
+   - Space Grotesk font for UI (loaded via next/font/google)
+   - JetBrains Mono font for code/data (loaded via next/font/google)
+   - CSS variables for font families (--font-space-grotesk, --font-jetbrains-mono)
+   - ToastProvider wrapper for global toast notifications
+   - Metadata for ClawBrain branding
+
+2. **`src/app/page.tsx`** - Server component entry point
+   - Runs onboarding on server before rendering client component
+   - Passes onboarding result to ClientPage
+   - Separates server-side file operations from client code
+
+3. **`src/app/client-page.tsx`** - Main page with 3-column layout
+   - Responsive layout: Sidebar (240px) | Kanban (flex) | Chat (400px)
+   - Collapsible sidebar with mobile overlay
+   - Error boundaries around Kanban and Chat panels
+   - Placeholder components for pending Agent C/D implementations
+   - Placeholder styling with dashed borders and wireframe aesthetic
+
+4. **`src/components/layout/Header.tsx`** - Top navigation header
+   - 56px height with border-bottom separator
+   - Menu toggle button (visible on all screens)
+   - Logo with "C" icon and "CLAWBRAIN" text in monospace
+   - Project selector dropdown (current: clawbrain)
+   - Action buttons: New task (+), Settings (gear)
+   - Mono wireframe styling with 1px borders
+
+5. **`src/components/layout/Sidebar.tsx`** - Left sidebar navigation
+   - Fixed 240px width (collapsible on mobile)
+   - Navigation items: Board (active), Chat
+   - Projects section with task counts
+   - Help & Support footer link
+   - Mobile overlay backdrop when open
+   - Active state with bg-sidebar-accent and border
+   - Mono wireframe grid aesthetic throughout
+
+6. **`src/lib/onboarding.ts`** - First-run setup (Server Action)
+   - Creates ~/clawdbrain/ directory structure on first run
+   - Creates subdirectories: tasks/, projects/, sessions/
+   - Checks Gateway WebSocket connectivity (ws://localhost:18789)
+   - Creates 3 sample tasks for demo:
+     * "Explore ClawBrain" (in-progress)
+     * "Create your first task" (todo)
+     * "Connect to OpenClaw Gateway" (todo)
+   - Proper error handling with OnboardingResult type
+   - getOnboardingStatus() for checking without modifying
+
+7. **`src/components/ui/ErrorBoundary.tsx`** - React error boundaries
+   - Class component wrapping children with error catching
+   - Custom fallback prop support
+   - Default fallback UI with wireframe styling:
+     * Destructive color scheme for error state
+     * "!" icon in bordered box
+     * Error message display
+     * "Try Again" button to reset error state
+   - Used to wrap Kanban and Chat panels separately
+
+8. **`src/components/ui/OfflineIndicator.tsx`** - Gateway connection status
+   - Checks WebSocket connection to Gateway every 10 seconds
+   - Shows floating banner when disconnected
+   - Two states: Connected (subtle) / Offline (destructive)
+   - Fixed position at bottom center
+   - WiFi icons for visual feedback
+   - Auto-hides when connected, shows when offline
+
+9. **`src/components/ui/Toaster.tsx`** - Toast notification system
+   - ToastProvider context for global state management
+   - useToast hook for adding/removing toasts
+   - Auto-dismiss after 5 seconds
+   - Three toast types: info, success, error
+   - Stacked notifications at bottom-right
+   - Each toast has icon, message, and close button
+   - Wireframe styling with colored borders per type
+
+**Bug fixes applied:**
+- Fixed Zod validation error handling (.errors -> .issues)
+- Fixed chat-store import in MessageList.tsx
+- Fixed server action requirements (async functions only)
+- Fixed CSS class focus:border-border-strong (moved to inline style)
+
+**Design implementation:**
+- Mono wireframe grid aesthetic (DESIGN.md compliant)
+- Sharp corners everywhere (0px radius enforced with !important)
+- 1px borders for all structural elements
+- No shadows - borders provide definition
+- Space Grotesk for UI headings and navigation
+- JetBrains Mono for data, timestamps, and code
+- Pure monochrome color palette (#FFFFFF to #0A0A0A)
+- CSS Grid and Flexbox for layout
+- 8px grid alignment system
+
+**Layout specifications:**
+- Header: 56px fixed height
+- Sidebar: 240px fixed width, collapsible on mobile (< 1024px)
+- Kanban: Flexible width (flex-1), min-width: 0 for content overflow
+- Chat: Fixed 400px width, hidden on mobile (< 1024px)
+- Main content: border-r between Kanban and Chat
+- Responsive breakpoints: lg (1024px) for chat visibility
+
+**Dependencies:**
+- Uses existing button, separator, tooltip from shadcn/ui
+- Uses lucide-react for icons (Menu, Plus, Settings, Wifi, WifiOff, etc.)
+- No additional dependencies required

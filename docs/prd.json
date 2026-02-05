@@ -129,7 +129,7 @@
       "Project selector in sidebar",
       "View switcher (Kanban only for MVP)"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "medium"
   },
   {
@@ -143,7 +143,7 @@
       "Create sample tasks for demo",
       "README with setup instructions"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "medium"
   },
   {
@@ -157,7 +157,7 @@
       "Loading states for async operations",
       "Toast notifications for errors"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "medium"
   },
   {

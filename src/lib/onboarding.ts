@@ -177,10 +177,10 @@ export async function runOnboarding(): Promise<OnboardingResult> {
 /**
  * Get onboarding status without running setup
  */
-export function getOnboardingStatus(): {
+export async function getOnboardingStatus(): Promise<{
   directoryExists: boolean;
   tasksDirExists: boolean;
-} {
+}> {
   return {
     directoryExists: existsSync(CLAWDBRAIN_DIR),
     tasksDirExists: existsSync(TASKS_DIR),

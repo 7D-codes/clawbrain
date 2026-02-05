@@ -8,24 +8,9 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { Toaster } from "@/components/ui/Toaster";
 import type { OnboardingResult } from "@/lib/onboarding";
 
-// Placeholder components until other agents complete their work
-const KanbanBoard = () => (
-  <div className="flex h-full items-center justify-center border border-dashed border-border p-8">
-    <div className="text-center">
-      <p className="text-muted-foreground font-mono text-sm">Kanban Board</p>
-      <p className="text-muted-foreground mt-2 text-xs">Agent D implementation pending</p>
-    </div>
-  </div>
-);
-
-const ChatPanel = () => (
-  <div className="flex h-full items-center justify-center border border-dashed border-border p-8">
-    <div className="text-center">
-      <p className="text-muted-foreground font-mono text-sm">Chat Panel</p>
-      <p className="text-muted-foreground mt-2 text-xs">Agent C implementation pending</p>
-    </div>
-  </div>
-);
+// Real components from agents C & D
+import { KanbanBoard } from "@/components/kanban";
+import { ChatPanel } from "@/components/chat";
 
 interface ClientPageProps {
   onboardingResult: OnboardingResult;

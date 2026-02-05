@@ -121,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const validationResult = CreateTaskSchema.safeParse(body);
     
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map(err => ({
+      const errors = validationResult.error.issues.map(err => ({
         field: err.path.join('.'),
         message: err.message
       }));
