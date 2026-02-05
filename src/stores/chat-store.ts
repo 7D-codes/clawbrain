@@ -209,6 +209,8 @@ export const selectCurrentStreamingMessage = (state: ChatState) =>
   state.currentStreamingMessage;
 
 // Derived selectors
+// Note: This selector may return a new array when currentStreamingMessage changes
+// Use with caution in useEffect dependencies - prefer using messages + currentStreamingMessage separately
 export const selectAllMessages = (state: ChatState): Message[] => {
   const { messages, currentStreamingMessage } = state;
   if (currentStreamingMessage) {
@@ -217,11 +219,17 @@ export const selectAllMessages = (state: ChatState): Message[] => {
   return messages;
 };
 
+// Stable selector that only returns the array reference (for dependency tracking)
+export const selectMessagesArray = (state: ChatState): Message[] => state.messages;
+
+// Selector for checking if we need to scroll (returns primitive)
+export const selectMessageCount = (state: ChatState): number => {
+  return state.messages.length + (state.currentStreamingMessage ? 1 : 0);
+};
+
 export const selectLastMessage = (state: ChatState): Message | null => {
   const allMessages = selectAllMessages(state);
   return allMessages[allMessages.length - 1] || null;
 };
 
-export const selectMessageCount = (state: ChatState): number => {
-  return selectAllMessages(state).length;
-};
+

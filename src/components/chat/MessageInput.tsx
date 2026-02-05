@@ -35,7 +35,7 @@ export function MessageInput({ disabled, className }: MessageInputProps) {
 
     window.addEventListener('quickPrompt', handleQuickPrompt);
     return () => window.removeEventListener('quickPrompt', handleQuickPrompt);
-  }, []);
+  }, [setText]); // setText is stable from useState
 
   // Auto-resize textarea
   useEffect(() => {

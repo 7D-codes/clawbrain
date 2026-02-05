@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -61,9 +61,16 @@ export function KanbanBoard() {
     })
   );
   
-  // Get tasks by status
-  const getTasksByStatus = useCallback((status: TaskStatus) => {
-    return localTasks.filter(task => task.status === status);
+  // Memoized task counts by status
+  const taskCounts = useMemo(() => ({
+    todo: localTasks.filter(task => task.status === 'todo').length,
+    'in-progress': localTasks.filter(task => task.status === 'in-progress').length,
+    done: localTasks.filter(task => task.status === 'done').length,
+  }), [localTasks]);
+
+  // Get tasks by status - memoized to prevent recalculation
+  const tasksByStatus = useMemo(() => {
+    return (status: TaskStatus) => localTasks.filter(task => task.status === status);
   }, [localTasks]);
   
   // Handle drag start
@@ -104,7 +111,7 @@ export function KanbanBoard() {
         return newTasks;
       });
     }
-  }, []);
+  }, []); // setLocalTasks is stable from useState
   
   // Handle drag end (commit changes)
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
@@ -267,7 +274,7 @@ export function KanbanBoard() {
                 key={column.id}
                 id={column.id}
                 title={column.title}
-                tasks={getTasksByStatus(column.id)}
+                tasks={tasksByStatus(column.id)}
               />
             ))}
           </div>
@@ -287,9 +294,9 @@ export function KanbanBoard() {
       {/* Status bar */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-neutral-200 bg-neutral-50/50">
         <div className="flex items-center gap-4 text-xs font-mono text-neutral-400">
-          <span>TODO: {getTasksByStatus('todo').length}</span>
-          <span>IN PROGRESS: {getTasksByStatus('in-progress').length}</span>
-          <span>DONE: {getTasksByStatus('done').length}</span>
+          <span>TODO: {taskCounts.todo}</span>
+          <span>IN PROGRESS: {taskCounts['in-progress']}</span>
+          <span>DONE: {taskCounts.done}</span>
         </div>
         
         {loadingTasks && (

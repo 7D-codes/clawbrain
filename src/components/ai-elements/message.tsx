@@ -195,17 +195,25 @@ export const MessageBranchContent = ({
   ...props
 }: MessageBranchContentProps) => {
   const { currentBranch, setBranches, branches } = useMessageBranch();
+  
+  // Create a stable children array reference
   const childrenArray = useMemo(
     () => (Array.isArray(children) ? children : [children]),
-    [children]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [Array.isArray(children) ? children.length : children]
   );
 
-  // Use useEffect to update branches when they change
+  // Use useEffect to update branches when children count changes
+  // Fix: Compare lengths only, not the arrays themselves to avoid loops
+  const childrenCount = childrenArray.length;
+  const branchesCount = branches.length;
+  
   useEffect(() => {
-    if (branches.length !== childrenArray.length) {
+    if (branchesCount !== childrenCount) {
       setBranches(childrenArray);
     }
-  }, [childrenArray, branches, setBranches]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childrenCount, branchesCount, setBranches]);
 
   return childrenArray.map((branch, index) => (
     <div
@@ -213,7 +221,7 @@ export const MessageBranchContent = ({
         "grid gap-2 overflow-hidden [&>div]:pb-0",
         index === currentBranch ? "block" : "hidden"
       )}
-      key={branch.key}
+      key={branch.key ?? index}
       {...props}
     >
       {branch}

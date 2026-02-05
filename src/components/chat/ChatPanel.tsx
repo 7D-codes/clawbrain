@@ -10,11 +10,12 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useGatewayWebSocket } from '@/lib/websocket';
-import { useChatStore, selectAllMessages } from '@/stores/chat-store';
+import { useEffect, useRef, useState } from 'react';
+import { useGatewayWebSocket, getGatewayUrl } from '@/lib/websocket';
+import { useChatStore, selectMessages, selectCurrentStreamingMessage } from '@/stores/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
+import { GatewaySettings } from './GatewaySettings';
 import { cn } from '@/lib/utils';
 import { Wifi, WifiOff, AlertCircle } from 'lucide-react';
 
@@ -24,15 +25,29 @@ interface ChatPanelProps {
 
 export function ChatPanel({ className }: ChatPanelProps) {
   const { isConnected, isLoading, error, reconnect } = useGatewayWebSocket();
-  const messages = useChatStore(selectAllMessages);
+  // Use stable selectors to avoid infinite re-renders
+  const messages = useChatStore(selectMessages);
+  const currentStreamingMessage = useChatStore(selectCurrentStreamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef<number>(0);
+  const [gatewayUrl, setGatewayUrl] = useState('ws://localhost:18789');
 
-  // Auto-scroll to bottom when new messages arrive
+  // Get gateway URL on client side
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    setGatewayUrl(getGatewayUrl());
+  }, []);
+
+  // Auto-scroll to bottom when new messages arrive (use count, not array)
+  useEffect(() => {
+    const currentCount = messages.length + (currentStreamingMessage ? 1 : 0);
+    // Only scroll if message count changed
+    if (currentCount !== prevMessageCountRef.current) {
+      prevMessageCountRef.current = currentCount;
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     }
-  }, [messages]);
+  }, [messages.length, currentStreamingMessage?.id]); // Use stable primitives
 
   return (
     <div
@@ -55,6 +70,15 @@ export function ChatPanel({ className }: ChatPanelProps) {
 
         {/* Connection status */}
         <div className="flex items-center gap-2">
+          {!isConnected && (
+            <GatewaySettings 
+              className="mr-1"
+              onSave={() => {
+                setGatewayUrl(getGatewayUrl());
+                reconnect();
+              }}
+            />
+          )}
           {error && (
             <button
               onClick={reconnect}
@@ -62,7 +86,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
               title="Click to reconnect"
             >
               <AlertCircle className="w-3 h-3" />
-              <span>ERROR</span>
+              <span>RETRY</span>
             </button>
           )}
           <div
@@ -93,7 +117,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
         ref={scrollRef}
         className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth"
       >
-        <MessageList messages={messages} />
+        <MessageList messages={currentStreamingMessage ? [...messages, currentStreamingMessage] : messages} />
       </div>
 
       {/* Input area */}
@@ -113,8 +137,8 @@ export function ChatPanel({ className }: ChatPanelProps) {
             </span>
           )}
         </div>
-        <div className="font-mono text-[10px] text-muted-foreground">
-          ws://localhost:18789
+        <div className="font-mono text-[10px] text-muted-foreground" title={gatewayUrl}>
+          {gatewayUrl.length > 25 ? gatewayUrl.slice(0, 25) + '...' : gatewayUrl}
         </div>
       </div>
     </div>

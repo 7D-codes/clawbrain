@@ -12,8 +12,25 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 
 // Gateway connection configuration
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:18789';
 const SESSION_KEY = 'clawbrain:main:main';
+
+// Get gateway URL from localStorage or env/default
+function getGatewayUrl(): string {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('clawbrain_gateway_url');
+    if (stored) return stored;
+  }
+  return process.env.NEXT_PUBLIC_GATEWAY_URL || 'ws://localhost:18789';
+}
+
+// Get gateway password from localStorage or env
+function getStoredPassword(): string {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('clawbrain_gateway_password');
+    if (stored) return stored;
+  }
+  return process.env.NEXT_PUBLIC_GATEWAY_PASSWORD || '';
+}
 const RECONNECT_INITIAL_DELAY = 1000;
 const RECONNECT_MAX_DELAY = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
@@ -74,11 +91,10 @@ class GatewayWebSocketClient {
     }
   }
 
-  // Get password from config or environment
+  // Get password from config, localStorage, or environment
   private getPassword(): string {
     if (this.password) return this.password;
-    // Fallback to environment variable or default
-    return process.env.NEXT_PUBLIC_GATEWAY_PASSWORD || '';
+    return getStoredPassword();
   }
 
   // Connect to Gateway
@@ -91,7 +107,7 @@ class GatewayWebSocketClient {
     this.notifyListeners();
 
     try {
-      const ws = new WebSocket(GATEWAY_URL);
+      const ws = new WebSocket(getGatewayUrl());
 
       ws.onopen = () => {
         console.log('[GatewayWebSocket] Connected, sending auth...');
@@ -305,18 +321,32 @@ export function resetGatewayClient(): void {
 
 // React hook for using the WebSocket client
 export function useGatewayWebSocket() {
-  const store = useChatStore();
+  // Use individual selectors instead of the entire store object
+  // Wrap in useCallback to ensure stable identity across renders
+  const setConnected = useChatStore(useCallback((state) => state.setConnected, []));
+  const addMessage = useChatStore(useCallback((state) => state.addMessage, []));
+  const appendToCurrentMessage = useChatStore(useCallback((state) => state.appendToCurrentMessage, []));
+  const finalizeCurrentMessage = useChatStore(useCallback((state) => state.finalizeCurrentMessage, []));
+  const setLoading = useChatStore(useCallback((state) => state.setLoading, []));
+  const setError = useChatStore(useCallback((state) => state.setError, []));
+  const clearError = useChatStore(useCallback((state) => state.clearError, []));
+  
+  // Select state values separately with stable selectors
+  const isConnected = useChatStore(useCallback((state) => state.isConnected, []));
+  const isLoading = useChatStore(useCallback((state) => state.isLoading, []));
+  const error = useChatStore(useCallback((state) => state.error, []));
+  
   const clientRef = useRef(getGatewayClient());
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const messageUnsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Setup connection listener
+  // Setup connection listener - stable dependencies
   useEffect(() => {
     const client = clientRef.current;
 
     // Subscribe to connection changes
     unsubscribeRef.current = client.onConnectionChange((connected) => {
-      store.setConnected(connected);
+      setConnected(connected);
     });
 
     // Subscribe to messages
@@ -324,15 +354,15 @@ export function useGatewayWebSocket() {
       switch (data.type) {
         case 'chunk':
           if (data.content) {
-            store.appendToCurrentMessage(data.content);
+            appendToCurrentMessage(data.content);
           }
           break;
         case 'done':
-          store.finalizeCurrentMessage();
+          finalizeCurrentMessage();
           break;
         case 'error':
-          store.setError(data.error);
-          store.finalizeCurrentMessage();
+          setError(data.error);
+          finalizeCurrentMessage();
           break;
       }
     });
@@ -346,11 +376,11 @@ export function useGatewayWebSocket() {
       unsubscribeRef.current?.();
       messageUnsubscribeRef.current?.();
     };
-  }, [store]);
+  }, [setConnected, appendToCurrentMessage, finalizeCurrentMessage, setError]);
 
   const sendMessage = useCallback((text: string) => {
     // Add user message to store
-    store.addMessage({
+    addMessage({
       id: `user-${Date.now()}`,
       role: 'user',
       content: text,
@@ -358,8 +388,8 @@ export function useGatewayWebSocket() {
     });
 
     // Set loading state
-    store.setLoading(true);
-    store.clearError();
+    setLoading(true);
+    clearError();
 
     // Send via WebSocket
     const sent = clientRef.current.sendMessage(text);
@@ -368,7 +398,7 @@ export function useGatewayWebSocket() {
       // Message was queued, will be sent when connected
       console.log('[useGatewayWebSocket] Message queued for delivery');
     }
-  }, [store]);
+  }, [addMessage, setLoading, clearError]);
 
   const reconnect = useCallback(() => {
     clientRef.current.connect();
@@ -379,9 +409,9 @@ export function useGatewayWebSocket() {
   }, []);
 
   return {
-    isConnected: store.isConnected,
-    isLoading: store.isLoading,
-    error: store.error,
+    isConnected,
+    isLoading,
+    error,
     sendMessage,
     reconnect,
     setPassword,
@@ -389,4 +419,4 @@ export function useGatewayWebSocket() {
 }
 
 export type { GatewayResponse, GatewayMessage };
-export { GatewayWebSocketClient, SESSION_KEY, GATEWAY_URL };
+export { GatewayWebSocketClient, SESSION_KEY, getGatewayUrl };

@@ -5,11 +5,16 @@ import { useTaskStore } from '@/stores/task-store';
 
 // Client-side polling-based file watcher
 export function useFileWatcher() {
-  const refreshFromWatcher = useTaskStore(state => state.refreshFromWatcher);
+  // Use individual selector for stable reference
+  const refreshFromWatcher = useTaskStore(useCallback((state) => state.refreshFromWatcher, []));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Debounced refresh function (300ms as per requirements)
+  // Use ref for the refresh function to avoid recreating the debounced function
+  const refreshRef = useRef(refreshFromWatcher);
+  refreshRef.current = refreshFromWatcher;
+  
   const debouncedRefresh = useCallback(async () => {
     // Clear existing timeout
     if (timeoutRef.current) {
@@ -19,9 +24,9 @@ export function useFileWatcher() {
     // Set new timeout
     timeoutRef.current = setTimeout(async () => {
       console.log('[FileWatcher] Detected file change, refreshing tasks...');
-      await refreshFromWatcher();
+      await refreshRef.current();
     }, 300);
-  }, [refreshFromWatcher]);
+  }, []); // No dependencies - uses ref for the actual function
   
   useEffect(() => {
     // Only run in browser environment
@@ -53,11 +58,16 @@ export function useFileWatcher() {
 
 // Hook to initialize file watching on component mount
 export function useInitializeFileWatcher() {
-  const loadTasks = useTaskStore(state => state.loadTasks);
+  // Use stable selector with useCallback
+  const loadTasks = useTaskStore(useCallback((state) => state.loadTasks, []));
+  const hasLoadedRef = useRef(false);
   
   useEffect(() => {
-    // Load tasks on mount
-    loadTasks();
+    // Load tasks on mount - prevent double-loading in Strict Mode
+    if (!hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadTasks();
+    }
   }, [loadTasks]);
   
   // Return the polling-based watcher
