@@ -1,0 +1,24 @@
+{
+  "name": "task-manager",
+  "version": "1.0.0",
+  "description": "OpenClaw skill for managing tasks as markdown files",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "openclaw",
+    "skill",
+    "task",
+    "todo",
+    "project-management"
+  ],
+  "author": "ClawBrain Team",
+  "license": "MIT",
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "js-yaml": "^4.1.0",
+    "gray-matter": "^4.0.3"
+  }
+}

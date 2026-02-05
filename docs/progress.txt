@@ -1,0 +1,104 @@
+# ClawBrain Progress Log
+
+## 2026-02-05 - Project Scaffold Complete
+
+### Completed
+1. ✅ **Next.js Project Created** — Using bun as package manager
+2. ✅ **shadcn/ui Initialized** — CSS Variables mode, neutral base
+3. ✅ **AI Elements Installed** — conversation, message components
+4. ✅ **Dependencies Installed** — zustand, chokidar, js-yaml, dnd-kit
+5. ✅ **Mono Wireframe Theme** — globals.css with design system
+6. ✅ **AGENTS.md Created** — Team assignments with skill requirements
+7. ✅ **CB-001 Marked Complete** — Scaffold story done
+
+### Project Structure
+```
+clawbrain/
+├── AGENTS.md              # Team assignments & skills
+├── README.md              # Updated with bun requirement
+├── bun.lock               # Bun lockfile
+├── components.json        # shadcn config
+├── next.config.ts
+├── package.json
+├── src/
+│   ├── app/
+│   │   ├── globals.css    # Mono wireframe theme
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── ai-elements/   # AI Elements components
+│   │   └── ui/            # shadcn components
+│   └── lib/
+│       └── utils.ts
+└── docs/
+    ├── PRD.md
+    ├── ARCHITECTURE.md
+    ├── DESIGN.md
+    ├── CRITICAL_REVIEW.md
+    ├── prd.json           # CB-001 completed
+    └── progress.txt       # This file
+```
+
+### Ready to Spawn
+
+**Agent A (CB-002):** Task Manager Skill
+**Agent B (CB-003, CB-008):** File System API + Security
+**Agent C (CB-005, CB-006):** WebSocket + Chat UI (uses frontend-design skill)
+**Agent D (CB-004, CB-007):** Kanban + File Sync (uses frontend-design skill)
+**Agent E (CB-009, CB-010, CB-011):** Layout + Integration (uses frontend-design skill)
+
+### Key Decisions
+- Package manager: **bun** (documented everywhere)
+- Next.js 15 (not 14 as originally planned)
+- Theme: Mono wireframe grid implemented in globals.css
+- Skills: frontend-design required for all UI agents
+
+---
+
+## 2026-02-05 - CB-002 Task Manager Skill Complete
+
+### Completed
+1. ✅ **Created SKILL.md** — Documentation for the task-manager skill
+2. ✅ **Created package.json** — Skill manifest with dependencies (uuid, js-yaml, gray-matter)
+3. ✅ **Created index.js** — Full skill implementation with:
+   - `createTask()` — Creates task with YAML frontmatter
+   - `listTasks()` — Lists all tasks with optional project/status filters
+   - `getTask()` — Gets single task by ID or slug
+   - `updateTask()` — Updates task fields (title, status, project)
+   - `deleteTask()` — Deletes task by ID or slug
+   - Natural language command parsing for all operations
+
+### Features
+- **File Format**: Markdown with YAML frontmatter following ARCHITECTURE.md schema
+- **Storage**: `~/clawdbrain/tasks/task-{uuid}.md`
+- **Commands**:
+  - `create task: "<title>" [in project <project>]`
+  - `list tasks [in project <project>] [with status <status>]`
+  - `update task <id|slug> status to <todo|in-progress|done>`
+  - `update task <id|slug> title to "<new title>"`
+  - `delete task <id|slug>`
+- **Project Associations**: Tasks support project field for filtering
+- **Slug Generation**: Auto-generated from title (kebab-case, 50 char limit)
+- **Timestamps**: ISO 8601 created/updated timestamps
+
+### Testing
+- ✅ Created and ran test.js — all 10 tests passed
+- Verified file format matches ARCHITECTURE.md specification
+- Commands parse natural language correctly
+- UUID/slug detection works for updates/deletes
+
+### Installation
+```bash
+# Copy to OpenClaw skills folder
+cp -r ~/Projects/clawbrain/skill/task-manager ~/.openclaw/skills/
+
+# Or symlink for development
+ln -s ~/Projects/clawbrain/skill/task-manager ~/.openclaw/skills/task-manager
+```
+
+### Deliverables
+- `skill/task-manager/SKILL.md`
+- `skill/task-manager/package.json`
+- `skill/task-manager/index.js`
+- `skill/task-manager/test.js` (test script)
+- Updated `docs/prd.json` — CB-002 marked completed

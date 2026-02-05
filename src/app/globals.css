@@ -1,26 +1,198 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* Mono Wireframe Grid Design System */
 
 @theme inline {
+  /* Base colors - pure monochrome */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  /* Fonts */
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+  
+  /* Grid spacing */
+  --spacing-grid: 8px;
+  
+  /* No radius - sharp corners for wireframe look */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Light mode - pure monochrome */
+  --background: #ffffff;
+  --foreground: #171717;
+  
+  --card: #ffffff;
+  --card-foreground: #171717;
+  
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  
+  --destructive: #dc2626;
+  --destructive-foreground: #fafafa;
+  
+  /* Borders are key to wireframe aesthetic */
+  --border: #e5e5e5;
+  --border-secondary: #d4d4d4;
+  --border-strong: #a3a3a3;
+  
+  --input: #e5e5e5;
+  --ring: #737373;
+  
+  /* Sidebar */
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #737373;
+}
+
+.dark {
+  /* Dark mode - pure monochrome */
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  
+  --card: #171717;
+  --card-foreground: #fafafa;
+  
+  --popover: #171717;
+  --popover-foreground: #fafafa;
+  
+  --primary: #fafafa;
+  --primary-foreground: #171717;
+  
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  
+  --border: #262626;
+  --border-secondary: #404040;
+  --border-strong: #525252;
+  
+  --input: #262626;
+  --ring: #a3a3a3;
+  
+  --sidebar: #171717;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #fafafa;
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #262626;
+  --sidebar-ring: #a3a3a3;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    /* Sharp corners everywhere */
+    border-radius: 0 !important;
+  }
+  
+  html {
+    font-family: var(--font-sans);
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Monospace for code/data */
+  code, pre, kbd, samp {
+    font-family: var(--font-mono);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Wireframe card style */
+  .wireframe-card {
+    @apply border border-border bg-card;
+    border-width: 1px;
+  }
+  
+  /* Wireframe input style */
+  .wireframe-input {
+    @apply border border-border bg-background px-3 py-2;
+    @apply focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring;
+  }
+  
+  /* Grid line helper */
+  .grid-line {
+    @apply border-border;
+    border-width: 0;
+  }
+  
+  .grid-line-x {
+    @apply border-b;
+  }
+  
+  .grid-line-y {
+    @apply border-r;
+  }
+}
+
+@layer utilities {
+  /* Grid-based spacing */
+  .gap-grid {
+    gap: var(--spacing-grid);
+  }
+  
+  .gap-grid-2 {
+    gap: calc(var(--spacing-grid) * 2);
+  }
+  
+  .gap-grid-3 {
+    gap: calc(var(--spacing-grid) * 3);
+  }
+  
+  .gap-grid-4 {
+    gap: calc(var(--spacing-grid) * 4);
+  }
 }

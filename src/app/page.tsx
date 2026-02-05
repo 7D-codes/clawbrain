@@ -1,65 +1,119 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import { Header } from "@/components/layout/Header";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { Toaster } from "@/components/ui/Toaster";
+import { runOnboarding } from "@/lib/onboarding";
+
+// Placeholder components until other agents complete their work
+const KanbanBoard = () => (
+  <div className="flex h-full items-center justify-center border border-dashed border-border p-8">
+    <div className="text-center">
+      <p className="text-muted-foreground font-mono text-sm">Kanban Board</p>
+      <p className="text-muted-foreground mt-2 text-xs">Agent D implementation pending</p>
+    </div>
+  </div>
+);
+
+const ChatPanel = () => (
+  <div className="flex h-full items-center justify-center border border-dashed border-border p-8">
+    <div className="text-center">
+      <p className="text-muted-foreground font-mono text-sm">Chat Panel</p>
+      <p className="text-muted-foreground mt-2 text-xs">Agent C implementation pending</p>
+    </div>
+  </div>
+);
 
 export default function Home() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+
+  // Handle responsive sidebar
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  // Run onboarding on first load
+  useEffect(() => {
+    const init = async () => {
+      await runOnboarding();
+      setOnboardingComplete(true);
+    };
+    init();
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex h-screen flex-col bg-background">
+      {/* Header */}
+      <Header 
+        onMenuClick={() => setSidebarOpen(!sidebarOpen)} 
+        sidebarOpen={sidebarOpen}
+      />
+
+      {/* Main content area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)}
+          isMobile={isMobile}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+
+        {/* Three-column layout */}
+        <main className="flex flex-1 overflow-hidden">
+          {/* Kanban Area - flexible width */}
+          <div className="flex flex-1 flex-col border-r border-border min-w-0">
+            <ErrorBoundary 
+              fallback={
+                <div className="flex h-full items-center justify-center p-8">
+                  <div className="text-center">
+                    <p className="text-destructive font-mono text-sm">Kanban Error</p>
+                    <p className="text-muted-foreground mt-2 text-xs">Something went wrong loading the board</p>
+                  </div>
+                </div>
+              }
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <KanbanBoard />
+            </ErrorBoundary>
+          </div>
+
+          {/* Chat Panel - fixed 400px width */}
+          <div className="w-[400px] flex-shrink-0 hidden lg:flex flex-col bg-background">
+            <ErrorBoundary
+              fallback={
+                <div className="flex h-full items-center justify-center p-8">
+                  <div className="text-center">
+                    <p className="text-destructive font-mono text-sm">Chat Error</p>
+                    <p className="text-muted-foreground mt-2 text-xs">Something went wrong loading chat</p>
+                  </div>
+                </div>
+              }
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+              <ChatPanel />
+            </ErrorBoundary>
+          </div>
+        </main>
+      </div>
+
+      {/* Global UI elements */}
+      <OfflineIndicator />
+      <Toaster />
     </div>
   );
 }

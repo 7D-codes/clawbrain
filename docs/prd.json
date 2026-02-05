@@ -1,0 +1,214 @@
+[
+  {
+    "id": "CB-001",
+    "title": "Project Setup & Tooling",
+    "description": "Initialize Next.js project with TypeScript, Tailwind, shadcn/ui, and AI Elements",
+    "acceptance": [
+      "Next.js 15 with App Router",
+      "TypeScript configured",
+      "shadcn/ui initialized (CSS Variables mode)",
+      "AI Elements installed (conversation, message)",
+      "Tailwind CSS with mono wireframe theme",
+      "Zustand, chokidar, js-yaml installed",
+      "dnd-kit installed",
+      "bun.lock created"
+    ],
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "CB-002",
+    "title": "Task Manager Skill",
+    "description": "Create OpenClaw skill for creating and managing tasks as structured markdown files",
+    "acceptance": [
+      "Skill reads/writes to ~/clawdbrain/tasks/",
+      "Generates UUIDs for task IDs",
+      "Validates YAML frontmatter",
+      "Supports create, read, update operations",
+      "Handles project associations",
+      "Installable via skills/ folder"
+    ],
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "CB-003",
+    "title": "File System API Layer",
+    "description": "Backend API routes for reading and writing task files with security sandboxing",
+    "acceptance": [
+      "GET /api/tasks - list all tasks (with pagination)",
+      "GET /api/tasks/[id] - get single task",
+      "PATCH /api/tasks/[id] - update task status",
+      "Path traversal protection (sandboxed to ~/clawdbrain/)",
+      "UUID-only task IDs",
+      "Proper error handling"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-004",
+    "title": "Kanban Board Component",
+    "description": "Build Kanban view with dnd-kit following mono wireframe design",
+    "acceptance": [
+      "Columns: To Do, In Progress, Done",
+      "Drag cards between columns",
+      "Status updates on drop (calls API)",
+      "Mono wireframe styling (visible grid, thin borders)",
+      "Cards as wireframe boxes with clear hierarchy",
+      "Real-time updates from file watcher"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-005",
+    "title": "Gateway WebSocket Client",
+    "description": "Connect Dashboard to OpenClaw Gateway for chat functionality",
+    "acceptance": [
+      "WebSocket connection to ws://localhost:18789",
+      "Auth with Gateway password/token",
+      "Persistent session management",
+      "Auto-reconnect on disconnect",
+      "Message send/receive with streaming",
+      "Session key: clawbrain:main:main"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-006",
+    "title": "Chat Panel UI",
+    "description": "Build chat interface using AI Elements with mono wireframe styling",
+    "acceptance": [
+      "Use AI Elements Conversation and Message components",
+      "Mono wireframe styling (borders, no shadows)",
+      "Message input with send button",
+      "Streaming message display",
+      "Scrollable message history",
+      "Matches grid system aesthetic"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-007",
+    "title": "Real-time File Sync",
+    "description": "File watching to update UI when tasks change on disk",
+    "acceptance": [
+      "Watch ~/clawdbrain/tasks/ directory with chokidar",
+      "Debounced updates (300ms)",
+      "Kanban refreshes when OpenClaw writes files",
+      "Handles file creation, modification, deletion",
+      "Memory-efficient watching"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-008",
+    "title": "File Concurrency & Locking",
+    "description": "Prevent data corruption from simultaneous writes",
+    "acceptance": [
+      "Atomic file writes (temp → rename pattern)",
+      "Conflict detection via timestamps",
+      "Last-write-wins strategy for MVP",
+      "Graceful handling of external modifications"
+    ],
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "CB-009",
+    "title": "Layout & Navigation",
+    "description": "Main layout with sidebar, chat panel, and Kanban area",
+    "acceptance": [
+      "Responsive 3-column layout (sidebar | kanban | chat)",
+      "Collapsible sidebar on mobile",
+      "Resizable panels (optional)",
+      "Project selector in sidebar",
+      "View switcher (Kanban only for MVP)"
+    ],
+    "status": "in_progress",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-010",
+    "title": "Onboarding & Setup",
+    "description": "First-run experience and configuration",
+    "acceptance": [
+      "Create ~/clawdbrain/ directory structure on first run",
+      "Check Gateway connectivity",
+      "Prompt for Gateway password if needed",
+      "Create sample tasks for demo",
+      "README with setup instructions"
+    ],
+    "status": "in_progress",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-011",
+    "title": "Error Handling & Resilience",
+    "description": "Graceful degradation when things break",
+    "acceptance": [
+      "Error boundaries around Kanban and Chat",
+      "Offline indicator when Gateway disconnects",
+      "Retry logic for failed file operations",
+      "Loading states for async operations",
+      "Toast notifications for errors"
+    ],
+    "status": "in_progress",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-012",
+    "title": "Demo Polish",
+    "description": "Final pass for demo readiness",
+    "acceptance": [
+      "No console errors",
+      "Responsive on desktop (mobile optional)",
+      "Smooth animations",
+      "Demo data pre-populated",
+      "Screenshot-ready UI"
+    ],
+    "status": "todo",
+    "priority": "low"
+  },
+  {
+    "id": "CB-013",
+    "title": "Performance at Scale",
+    "description": "Ensure dashboard remains responsive with large task volumes (post-MVP)",
+    "acceptance": [
+      "Virtual scrolling for Kanban",
+      "Pagination for task API",
+      "Performance benchmarks: <100ms to load 1000 tasks"
+    ],
+    "status": "todo",
+    "priority": "low"
+  },
+  {
+    "id": "CB-014",
+    "title": "List View",
+    "description": "Alternative list view for tasks (post-MVP)",
+    "acceptance": [
+      "Sortable columns",
+      "Status badges",
+      "Quick status toggle",
+      "Search/filter"
+    ],
+    "status": "todo",
+    "priority": "low"
+  },
+  {
+    "id": "CB-015",
+    "title": "File Provider Abstraction",
+    "description": "Abstract file operations for future Electron migration (post-MVP)",
+    "acceptance": [
+      "FileProvider interface defined",
+      "WebFileProvider implementation",
+      "Documentation for ElectronFileProvider"
+    ],
+    "status": "todo",
+    "priority": "low"
+  }
+]
