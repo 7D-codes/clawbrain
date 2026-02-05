@@ -73,7 +73,7 @@
       "Message send/receive with streaming",
       "Session key: clawbrain:main:main"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {
@@ -88,7 +88,7 @@
       "Scrollable message history",
       "Matches grid system aesthetic"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {

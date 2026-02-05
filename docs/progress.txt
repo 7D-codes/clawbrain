@@ -64,3 +64,87 @@
 - Drag operations optimistically update local state
 - API calls made on drag end to persist changes
 - File watcher refreshes task list when files change
+
+## 2026-02-05 - Agent C
+
+### Completed: CB-005 + CB-006 - Gateway WebSocket Client + Chat Panel UI
+
+**Deliverables created:**
+
+1. **`src/lib/websocket.ts`** - WebSocket client with auto-reconnect
+   - GatewayWebSocketClient singleton class
+   - Connection to ws://localhost:18789
+   - Auth with password (from env or setPassword method)
+   - Session key: clawbrain:main:main
+   - Auto-reconnect with exponential backoff (1s to 30s)
+   - Max 10 reconnect attempts
+   - Message queueing when offline
+   - Event-based architecture for connection and message handling
+   - useGatewayWebSocket React hook for components
+
+2. **`src/stores/chat-store.ts`** - Zustand store for chat state
+   - Message type definitions with MessageRole (user, assistant, system)
+   - Store state: messages, currentStreamingMessage, isConnected, isLoading, error
+   - Actions: setConnected, setLoading, setError, addMessage, updateMessage, deleteMessage, clearMessages
+   - Streaming actions: startStreamingMessage, appendToCurrentMessage, finalizeCurrentMessage, cancelStreaming
+   - Selectors: selectMessages, selectIsConnected, selectIsLoading, selectError, selectAllMessages
+   - Devtools middleware for Redux DevTools integration
+
+3. **`src/components/chat/ChatPanel.tsx`** - Main chat container
+   - Header with connection status indicator (CONNECTED/OFFLINE)
+   - Wifi/WifiOff icons for connection state
+   - Error display with reconnect button
+   - Scrollable message area with auto-scroll to bottom
+   - MessageList and MessageInput components
+   - Status bar with message count and streaming indicator
+   - Mono wireframe styling throughout
+
+4. **`src/components/chat/MessageList.tsx`** - Message display
+   - User messages: right-aligned, transparent bg
+   - Assistant messages: left-aligned, secondary bg with subtle styling
+   - Avatar icons (User/Bot) with border styling
+   - Timestamps formatted with date-fns (HH:mm:ss)
+   - Smart timestamp display (on role change or >5min gap)
+   - Empty state with quick prompt suggestions
+   - Simple markdown rendering (headings, code, lists)
+   - Streaming indicator (animated cursor)
+   - QuickPrompt component for suggested messages
+
+5. **`src/components/chat/MessageInput.tsx`** - Input field
+   - Auto-resizing textarea (max 200px height)
+   - Send button with loading state (spinner)
+   - Keyboard shortcuts: Enter to send, Shift+Enter for new line
+   - Disabled state when offline or loading
+   - Character count display
+   - Quick prompt event handling
+   - Focus states with border-strong color
+
+6. **`src/components/chat/index.ts`** - Component exports
+
+**Design implementation:**
+- Mono wireframe grid aesthetic (DESIGN.md compliant)
+- Sharp corners (0 radius) - no rounded corners anywhere
+- 1px borders throughout, no shadows
+- Space Grotesk for UI text (font-sans class)
+- JetBrains Mono for timestamps and code (font-mono class)
+- Pure monochrome palette (no accent colors)
+- Status bar with monospace typography
+- Connection indicator with border styling
+
+**Dependencies added:**
+- date-fns@4.1.0 for timestamp formatting
+
+**WebSocket Protocol Compliance:**
+- Auth message on connect: { type: 'auth', params: { auth: { password } } }
+- Join session: { type: 'join', sessionKey: 'clawbrain:main:main', label: 'main' }
+- Send message: { type: 'message', text, replyToCurrent }
+- Handle responses: chunk, done, error types
+- Auth success triggers session join
+
+**Integration notes:**
+- ChatPanel uses useGatewayWebSocket hook
+- Messages stored in Zustand store
+- Streaming messages appended in real-time
+- Auto-scroll keeps view at bottom
+- Quick prompts dispatch custom events
+- Input disabled when not connected

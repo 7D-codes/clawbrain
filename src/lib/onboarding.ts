@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+"use server";
+
+import { existsSync, mkdirSync, writeFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { randomUUID } from "crypto";
@@ -147,9 +149,12 @@ export async function runOnboarding(): Promise<OnboardingResult> {
       result.hasSampleTasks = true;
     } else {
       // Directory exists, check if it has sample tasks
-      const tasksExist = existsSync(TASKS_DIR) && 
-        require("fs").readdirSync(TASKS_DIR).length > 0;
-      result.hasSampleTasks = tasksExist;
+      try {
+        const tasksExist = existsSync(TASKS_DIR) && readdirSync(TASKS_DIR).length > 0;
+        result.hasSampleTasks = tasksExist;
+      } catch {
+        result.hasSampleTasks = false;
+      }
     }
 
     // Check Gateway connectivity (non-blocking)

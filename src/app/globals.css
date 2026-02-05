@@ -26,9 +26,9 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   
-  /* Fonts */
-  --font-sans: "Space Grotesk", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+  /* Fonts - use CSS variables from Next.js font loading */
+  --font-sans: var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", "IBM Plex Mono", monospace;
   
   /* Grid spacing */
   --spacing-grid: 8px;
@@ -160,7 +160,11 @@
   /* Wireframe input style */
   .wireframe-input {
     @apply border border-border bg-background px-3 py-2;
-    @apply focus:border-border-strong focus:outline-none focus:ring-1 focus:ring-ring;
+    @apply focus:outline-none focus:ring-1 focus:ring-ring;
+  }
+  
+  .wireframe-input:focus {
+    border-color: var(--border-strong);
   }
   
   /* Grid line helper */
