@@ -3,37 +3,25 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useTaskStore } from '@/stores/task-store';
 
-// Debounce utility
-function debounce<T extends (...args: unknown[]) => void>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  
-  return (...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      fn(...args);
-      timeoutId = null;
-    }, delay);
-  };
-}
-
 // Client-side polling-based file watcher
 export function useFileWatcher() {
   const refreshFromWatcher = useTaskStore(state => state.refreshFromWatcher);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Debounced refresh function (300ms as per requirements)
-  const debouncedRefresh = useCallback(
-    debounce(async () => {
+  const debouncedRefresh = useCallback(async () => {
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Set new timeout
+    timeoutRef.current = setTimeout(async () => {
       console.log('[FileWatcher] Detected file change, refreshing tasks...');
       await refreshFromWatcher();
-    }, 300),
-    [refreshFromWatcher]
-  );
+    }, 300);
+  }, [refreshFromWatcher]);
   
   useEffect(() => {
     // Only run in browser environment
@@ -51,6 +39,9 @@ export function useFileWatcher() {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, [debouncedRefresh]);

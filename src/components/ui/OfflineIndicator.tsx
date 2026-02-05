@@ -13,7 +13,6 @@ export function OfflineIndicator() {
 
   useEffect(() => {
     let ws: WebSocket | null = null;
-    let reconnectTimer: NodeJS.Timeout | null = null;
     let checkInterval: NodeJS.Timeout | null = null;
 
     const checkConnection = () => {
@@ -48,7 +47,6 @@ export function OfflineIndicator() {
     checkInterval = setInterval(checkConnection, 10000);
 
     return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (checkInterval) clearInterval(checkInterval);
       if (ws) ws.close();
     };
