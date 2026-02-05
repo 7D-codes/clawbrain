@@ -3,7 +3,7 @@
  * 
  * Handles connection to OpenClaw Gateway with:
  * - Auto-reconnect with exponential backoff
- * - Auth with Gateway password
+ * - Auth with Gateway password (new protocol v3)
  * - Session management (clawbrain:main:main)
  * - Message streaming support
  * - Detailed connection diagnostics
@@ -14,6 +14,7 @@ import { useChatStore } from '@/stores/chat-store';
 
 // Gateway connection configuration
 const SESSION_KEY = 'clawbrain:main:main';
+const PROTOCOL_VERSION = 3;
 
 // Get gateway URL from localStorage or env/default
 function getGatewayUrl(): string {
@@ -33,19 +34,26 @@ function getStoredPassword(): string {
   return process.env.NEXT_PUBLIC_GATEWAY_PASSWORD || '';
 }
 
-// Test full connection including auth
+// Generate a unique request ID
+function generateReqId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Test full connection including auth (new protocol v3)
 function testFullConnection(
   url: string, 
   password: string
 ): Promise<{ 
   success: boolean; 
-  stage: 'connect' | 'auth' | 'join' | 'success';
+  stage: 'connect' | 'auth' | 'success';
   error?: string;
   details?: string;
 }> {
   return new Promise((resolve) => {
-    let stage: 'connect' | 'auth' | 'join' | 'success' = 'connect';
+    let stage: 'connect' | 'auth' | 'success' = 'connect';
     let ws: WebSocket | null = null;
+    let connectReqId: string | null = null;
+    let challengeNonce: string | null = null;
     
     const timeout = setTimeout(() => {
       if (ws) ws.close();
@@ -55,9 +63,7 @@ function testFullConnection(
         error: `Timeout at stage: ${stage}`,
         details: stage === 'connect' 
           ? 'WebSocket failed to open within 5 seconds' 
-          : stage === 'auth' 
-            ? 'No auth response received' 
-            : 'No session join response received'
+          : 'No auth response received'
       });
     }, 10000);
 
@@ -65,30 +71,75 @@ function testFullConnection(
       ws = new WebSocket(url);
       
       ws.onopen = () => {
-        stage = 'auth';
-        // Send auth message
-        const authMessage = {
-          type: 'auth',
-          params: {
-            auth: { password },
-          },
-        };
-        ws?.send(JSON.stringify(authMessage));
+        stage = 'connect';
+        // Wait for connect.challenge event
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           
-          if (data.type === 'auth_success') {
-            stage = 'join';
-            // Send join message
-            const joinMessage = {
-              type: 'join',
-              sessionKey: SESSION_KEY,
-              label: 'main',
+          // Handle connect challenge
+          if (data.type === 'event' && data.event === 'connect.challenge') {
+            stage = 'auth';
+            challengeNonce = data.payload.nonce;
+            connectReqId = generateReqId();
+            
+            // Send connect request with new protocol
+            const connectMessage = {
+              type: 'req',
+              id: connectReqId,
+              method: 'connect',
+              params: {
+                minProtocol: PROTOCOL_VERSION,
+                maxProtocol: PROTOCOL_VERSION,
+                client: {
+                  id: 'clawbrain-test',
+                  version: '1.0.0',
+                  platform: 'web',
+                  mode: 'operator',
+                },
+                role: 'operator',
+                scopes: ['operator.read', 'operator.write'],
+                caps: [],
+                commands: [],
+                permissions: {},
+                auth: { 
+                  token: password,
+                },
+                locale: 'en-US',
+                userAgent: 'clawbrain/1.0.0',
+                device: {
+                  id: `clawbrain-test-${Date.now()}`,
+                  nonce: challengeNonce,
+                },
+              },
             };
-            ws?.send(JSON.stringify(joinMessage));
+            ws?.send(JSON.stringify(connectMessage));
+          }
+          
+          // Handle connect response
+          else if (data.type === 'res' && data.id === connectReqId) {
+            clearTimeout(timeout);
+            ws?.close();
+            
+            if (data.ok) {
+              resolve({ success: true, stage: 'success' });
+            } else {
+              resolve({ 
+                success: false, 
+                stage: 'auth', 
+                error: `Auth failed: ${data.error?.message || 'Unknown error'}`,
+                details: 'The gateway rejected the password. Check your password in settings.'
+              });
+            }
+          }
+          
+          // Legacy auth handling (for backward compatibility)
+          else if (data.type === 'auth_success') {
+            clearTimeout(timeout);
+            ws?.close();
+            resolve({ success: true, stage: 'success' });
           } else if (data.type === 'auth_error') {
             clearTimeout(timeout);
             ws?.close();
@@ -98,10 +149,6 @@ function testFullConnection(
               error: `Auth failed: ${data.error}`,
               details: 'The gateway rejected the password. Check your password in settings.'
             });
-          } else if (data.type === 'joined') {
-            clearTimeout(timeout);
-            ws?.close();
-            resolve({ success: true, stage: 'success' });
           }
         } catch (err) {
           clearTimeout(timeout);
@@ -165,16 +212,23 @@ export type ConnectionState =
   | 'disconnected' 
   | 'error';
 
-// Message types from Gateway protocol
+// Message types from Gateway protocol (v3)
+// Request: {type:"req", id, method, params}
+// Response: {type:"res", id, ok, payload|error}
+// Event: {type:"event", event, payload}
+
 type GatewayMessage =
-  | { type: 'auth'; params: { auth: { password: string } } }
-  | { type: 'join'; sessionKey: string; label: string }
+  | { type: 'req'; id: string; method: string; params: Record<string, unknown> }
   | { type: 'message'; text: string; replyToCurrent?: boolean };
 
 type GatewayResponse =
+  | { type: 'res'; id: string; ok: boolean; payload?: unknown; error?: { message: string } }
+  | { type: 'event'; event: string; payload: Record<string, unknown> }
+  // Legacy message types for chat streaming
   | { type: 'chunk'; content: string; sessionKey?: string }
   | { type: 'done'; sessionKey?: string }
   | { type: 'error'; error: string; sessionKey?: string }
+  // Legacy auth responses (for backward compat)
   | { type: 'auth_success' }
   | { type: 'auth_error'; error: string }
   | { type: 'joined'; sessionKey: string };
@@ -213,6 +267,8 @@ class GatewayWebSocketClient {
   };
 
   private password: string | null = null;
+  private connectReqId: string | null = null;
+  private challengeNonce: string | null = null;
   private listeners: Set<(connected: boolean) => void> = new Set();
   private stateListeners: Set<(state: ConnectionState) => void> = new Set();
   private messageListeners: Set<(data: GatewayResponse) => void> = new Set();
@@ -268,6 +324,7 @@ class GatewayWebSocketClient {
 
     this.state.isConnecting = true;
     this.state.lastError = null;
+    this.challengeNonce = null;
     this.setConnectionState('connecting');
     this.notifyListeners();
 
@@ -278,33 +335,14 @@ class GatewayWebSocketClient {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
-        debugLog('WebSocket opened, sending auth...');
-        this.setConnectionState('authenticating');
-        
-        // Send auth message immediately on connect
-        const password = this.getPassword();
-        const authMessage: GatewayMessage = {
-          type: 'auth',
-          params: {
-            auth: {
-              password,
-            },
-          },
-        };
-        
-        try {
-          ws.send(JSON.stringify(authMessage));
-          debugLog('Auth message sent');
-        } catch (err) {
-          debugLog('Failed to send auth message:', err);
-          this.handleError('Failed to send auth message');
-        }
+        debugLog('WebSocket opened, waiting for challenge...');
+        // Don't send anything yet - wait for connect.challenge event
       };
 
       ws.onmessage = (event) => {
         try {
           const data: GatewayResponse = JSON.parse(event.data);
-          debugLog('Received message:', data.type);
+          debugLog('Received message:', (data as {type: string}).type);
           this.handleMessage(data);
         } catch (err) {
           debugLog('Failed to parse message:', err);
@@ -332,6 +370,61 @@ class GatewayWebSocketClient {
     }
   }
 
+  // Send connect request after receiving challenge
+  private sendConnectRequest(): void {
+    if (!this.state.ws || this.state.ws.readyState !== WebSocket.OPEN) {
+      debugLog('Cannot send connect - WebSocket not open');
+      return;
+    }
+
+    this.connectReqId = generateReqId();
+    const password = this.getPassword();
+    
+    // Build device identity
+    const deviceId = `clawbrain-${Date.now()}`;
+    
+    const connectMessage: GatewayMessage = {
+      type: 'req',
+      id: this.connectReqId,
+      method: 'connect',
+      params: {
+        minProtocol: PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
+        client: {
+          id: 'clawbrain',
+          version: '1.0.0',
+          platform: 'web',
+          mode: 'operator',
+        },
+        role: 'operator',
+        scopes: ['operator.read', 'operator.write'],
+        caps: [],
+        commands: [],
+        permissions: {},
+        auth: { 
+          token: password,
+          // For local loopback connections, we can use password as token
+          // For remote, we'd need proper device token
+        },
+        locale: 'en-US',
+        userAgent: 'clawbrain/1.0.0',
+        device: {
+          id: deviceId,
+          nonce: this.challengeNonce,
+        },
+      },
+    };
+
+    try {
+      this.state.ws.send(JSON.stringify(connectMessage));
+      debugLog('Connect request sent:', this.connectReqId);
+      this.setConnectionState('authenticating');
+    } catch (err) {
+      debugLog('Failed to send connect request:', err);
+      this.handleError('Failed to send connect request');
+    }
+  }
+
   // Handle errors
   private handleError(error: string) {
     this.state.lastError = error;
@@ -342,33 +435,37 @@ class GatewayWebSocketClient {
 
   // Handle incoming messages
   private handleMessage(data: GatewayResponse): void {
-    switch (data.type) {
+    const msgType = (data as {type: string}).type;
+    
+    switch (msgType) {
+      case 'event':
+        this.handleEvent(data as {type: 'event'; event: string; payload: Record<string, unknown>});
+        break;
+
+      case 'res':
+        this.handleResponse(data as {type: 'res'; id: string; ok: boolean; payload?: unknown; error?: { message: string }});
+        break;
+
+      // Legacy message handling (for backward compatibility)
       case 'auth_success':
-        debugLog('Auth successful, joining session...');
+        debugLog('Auth successful (legacy), joining session...');
         this.state.isAuthenticated = true;
-        // Join the session after auth
-        this.send({
-          type: 'join',
-          sessionKey: SESSION_KEY,
-          label: 'main',
-        });
+        this.sendLegacyJoin();
         break;
 
       case 'auth_error':
-        debugLog('Auth failed:', data.error);
+        debugLog('Auth failed (legacy):', (data as {error: string}).error);
         this.state.isAuthenticated = false;
-        this.handleError(`Authentication failed: ${data.error}`);
-        // Don't reconnect on auth error - need correct password
+        this.handleError(`Authentication failed: ${(data as {error: string}).error}`);
         this.disconnect();
         break;
 
       case 'joined':
-        debugLog(`Joined session: ${data.sessionKey}`);
+        debugLog(`Joined session (legacy): ${(data as {sessionKey: string}).sessionKey}`);
         this.state.isConnecting = false;
         this.state.reconnectAttempts = 0;
         this.setConnectionState('connected');
         this.notifyListeners();
-        // Send any queued messages
         this.flushMessageQueue();
         break;
 
@@ -381,6 +478,77 @@ class GatewayWebSocketClient {
 
       default:
         debugLog('Received unknown message type:', data);
+    }
+  }
+
+  // Handle event messages
+  private handleEvent(data: {type: 'event'; event: string; payload: Record<string, unknown>}): void {
+    switch (data.event) {
+      case 'connect.challenge':
+        debugLog('Received connect challenge');
+        this.challengeNonce = data.payload.nonce as string;
+        this.sendConnectRequest();
+        break;
+
+      case 'hello-ok':
+        debugLog('Received hello-ok event');
+        break;
+
+      default:
+        debugLog('Received event:', data.event);
+        // Forward to message listeners for potential handling
+        this.messageListeners.forEach((listener) => listener(data as unknown as GatewayResponse));
+    }
+  }
+
+  // Handle response messages
+  private handleResponse(data: {type: 'res'; id: string; ok: boolean; payload?: unknown; error?: { message: string }}): void {
+    // Check if this is the connect response
+    if (data.id === this.connectReqId) {
+      if (data.ok) {
+        debugLog('Connect successful, authenticated!');
+        this.state.isAuthenticated = true;
+        this.state.isConnecting = false;
+        this.state.reconnectAttempts = 0;
+        this.setConnectionState('connected');
+        this.notifyListeners();
+        this.flushMessageQueue();
+        
+        // Store device token if provided
+        const payload = data.payload as {auth?: {deviceToken?: string}} | undefined;
+        if (payload?.auth?.deviceToken) {
+          debugLog('Received device token');
+          // Could store for future connections
+        }
+      } else {
+        debugLog('Connect failed:', data.error);
+        this.state.isAuthenticated = false;
+        this.handleError(`Authentication failed: ${data.error?.message || 'Unknown error'}`);
+        // Don't reconnect on auth error
+        this.disconnect();
+      }
+      return;
+    }
+
+    // Forward other responses to listeners
+    this.messageListeners.forEach((listener) => listener(data as unknown as GatewayResponse));
+  }
+
+  // Send legacy join message (for backward compatibility)
+  private sendLegacyJoin(): void {
+    if (!this.state.ws || this.state.ws.readyState !== WebSocket.OPEN) return;
+    
+    const joinMessage = {
+      type: 'join',
+      sessionKey: SESSION_KEY,
+      label: 'main',
+    };
+    
+    try {
+      this.state.ws.send(JSON.stringify(joinMessage));
+      debugLog('Legacy join message sent');
+    } catch (err) {
+      debugLog('Failed to send legacy join:', err);
     }
   }
 
@@ -447,13 +615,29 @@ class GatewayWebSocketClient {
     }
   }
 
-  // Send a chat message
+  // Send a chat message (legacy format - can be updated to use req/res protocol)
   sendMessage(text: string, replyToCurrent: boolean = true): boolean {
-    return this.send({
+    // Use legacy message format for chat
+    const message = {
       type: 'message',
       text,
       replyToCurrent,
-    });
+    };
+    
+    if (!this.isConnected()) {
+      debugLog('Not connected, queueing message');
+      this.state.messageQueue.push(JSON.stringify(message));
+      return false;
+    }
+
+    try {
+      this.state.ws?.send(JSON.stringify(message));
+      return true;
+    } catch (err) {
+      debugLog('Send failed:', err);
+      this.state.messageQueue.push(JSON.stringify(message));
+      return false;
+    }
   }
 
   // Flush queued messages

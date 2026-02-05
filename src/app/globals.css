@@ -118,14 +118,14 @@
   --input: #262626;
   --ring: #a3a3a3;
   
-  --sidebar: #171717;
+  --sidebar: #0f0f0f;
   --sidebar-foreground: #fafafa;
   --sidebar-primary: #fafafa;
   --sidebar-primary-foreground: #171717;
-  --sidebar-accent: #262626;
+  --sidebar-accent: #1a1a1a;
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: #262626;
-  --sidebar-ring: #a3a3a3;
+  --sidebar-ring: #525252;
 }
 
 @layer base {
@@ -147,6 +147,32 @@
   /* Monospace for code/data */
   code, pre, kbd, samp {
     font-family: var(--font-mono);
+  }
+
+  /* Responsive scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 1px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+
+  /* Firefox scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
   }
 }
 
@@ -180,6 +206,24 @@
   .grid-line-y {
     @apply border-r;
   }
+
+  /* Mobile touch targets */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Responsive panel */
+  .panel {
+    @apply bg-background border-border;
+  }
+
+  .panel-sidebar {
+    @apply w-[260px] flex-shrink-0;
+  }
+
+  .panel-chat {
+    @apply w-[320px] sm:w-[380px] lg:w-[420px] flex-shrink-0;
+  }
 }
 
 @layer utilities {
@@ -198,5 +242,69 @@
   
   .gap-grid-4 {
     gap: calc(var(--spacing-grid) * 4);
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Responsive text */
+  .text-responsive-xs {
+    @apply text-[10px] sm:text-xs;
+  }
+
+  .text-responsive-sm {
+    @apply text-xs sm:text-sm;
+  }
+
+  /* Animation utilities */
+  .animate-in {
+    animation: animateIn 0.2s ease-out;
+  }
+
+  .animate-out {
+    animation: animateOut 0.15s ease-in;
+  }
+
+  @keyframes animateIn {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes animateOut {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+  }
+}
+
+/* Responsive breakpoints helper classes */
+@media (max-width: 640px) {
+  .mobile-full {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .tablet-hidden {
+    display: none !important;
   }
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toaster";
+import { ThemeProvider } from "@/components/theme";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -31,9 +32,11 @@ export default function RootLayout({
         className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}
         style={{ fontFamily: "var(--font-space-grotesk), system-ui, sans-serif" }}
       >
-        <ToastProvider>
-          {children}
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

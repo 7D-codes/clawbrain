@@ -13,27 +13,11 @@ interface KanbanColumnProps {
   onTaskClick?: (task: Task) => void;
 }
 
-// Column configuration for mono wireframe aesthetic
-const columnConfig: Record<TaskStatus, { label: string; borderColor: string }> = {
-  'todo': {
-    label: 'To Do',
-    borderColor: 'border-neutral-300',
-  },
-  'in-progress': {
-    label: 'In Progress',
-    borderColor: 'border-neutral-500',
-  },
-  'done': {
-    label: 'Done',
-    borderColor: 'border-neutral-900',
-  },
-};
-
-// Status indicator for column header
+// Status indicator for column header - using semantic colors
 const statusIndicator: Record<TaskStatus, string> = {
-  'todo': 'bg-neutral-300',
-  'in-progress': 'bg-neutral-500',
-  'done': 'bg-neutral-900',
+  'todo': 'bg-muted-foreground/30',
+  'in-progress': 'bg-muted-foreground/60',
+  'done': 'bg-foreground',
 };
 
 export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProps) {
@@ -45,7 +29,6 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
     },
   });
   
-  const config = columnConfig[id];
   const taskIds = tasks.map(t => t.id);
   
   return (
@@ -53,7 +36,7 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
       className={cn(
         // Column container - wireframe aesthetic
         'flex flex-col h-full min-w-[280px] max-w-[320px]',
-        'border-r border-neutral-200 last:border-r-0',
+        'border-r border-border last:border-r-0',
         'bg-transparent',
       )}
     >
@@ -61,8 +44,8 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
       <div 
         className={cn(
           'flex items-center justify-between px-4 py-3',
-          'border-b border-neutral-200',
-          'bg-neutral-50/50'
+          'border-b border-border',
+          'bg-secondary/30'
         )}
       >
         <div className="flex items-center gap-2">
@@ -73,12 +56,12 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
           )} />
           
           {/* Column title */}
-          <h2 className="text-sm font-semibold text-neutral-900 uppercase tracking-wide">
-            {title || config.label}
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+            {title}
           </h2>
           
           {/* Task count */}
-          <span className="text-xs font-mono text-neutral-400 ml-1">
+          <span className="text-xs font-mono text-muted-foreground ml-1">
             {tasks.length}
           </span>
         </div>
@@ -87,10 +70,9 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
         <button 
           className={cn(
             'w-6 h-6 flex items-center justify-center',
-            'border border-neutral-300 hover:border-neutral-500',
-            'text-neutral-400 hover:text-neutral-700',
-            'transition-colors duration-150',
-            'rounded-none'
+            'border border-border hover:border-foreground',
+            'text-muted-foreground hover:text-foreground',
+            'transition-colors duration-150'
           )}
           aria-label="Add task"
         >
@@ -117,8 +99,8 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
           
           // Drop target styling
           isOver && [
-            'bg-neutral-100/50',
-            'outline outline-1 outline-neutral-400 outline-offset-[-1px]',
+            'bg-accent/50',
+            'outline outline-1 outline-border-strong outline-offset-[-1px]',
           ]
         )}
       >
@@ -140,8 +122,8 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
           <div 
             className={cn(
               'flex flex-col items-center justify-center',
-              'py-8 px-4 border border-dashed border-neutral-300',
-              'text-neutral-400'
+              'py-8 px-4 border border-dashed border-border',
+              'text-muted-foreground'
             )}
           >
             <span className="text-xs font-mono uppercase tracking-wider">

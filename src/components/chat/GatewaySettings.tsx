@@ -16,6 +16,7 @@ import { testFullConnection } from '@/lib/websocket';
 interface GatewaySettingsProps {
   className?: string;
   onSave?: () => void;
+  variant?: 'button' | 'panel';
 }
 
 // Get current settings from localStorage or defaults
@@ -65,8 +66,8 @@ function testBasicConnection(url: string): Promise<{ success: boolean; error?: s
   });
 }
 
-export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function GatewaySettings({ className, onSave, variant = 'button' }: GatewaySettingsProps) {
+  const [isOpen, setIsOpen] = useState(variant === 'panel');
   const [url, setUrl] = useState('ws://localhost:18789');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -136,10 +137,13 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
     setUrl(settings.url);
     setPassword(settings.password);
     setTestResult(null);
-    setIsOpen(false);
+    if (variant !== 'panel') {
+      setIsOpen(false);
+    }
   };
 
-  if (!isOpen) {
+  // Button variant - shows a settings button that opens the panel
+  if (variant === 'button' && !isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
@@ -158,17 +162,20 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
     );
   }
 
+  // Panel variant or expanded button variant
   return (
-    <div className={cn('flex flex-col gap-3 p-4 border border-border bg-background min-w-[340px] max-w-[400px]', className)}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-foreground">Gateway Settings</span>
-        <button
-          onClick={handleCancel}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+    <div className={cn('flex flex-col gap-3', variant === 'button' && 'p-4 border border-border bg-background min-w-[340px] max-w-[400px]', className)}>
+      {variant === 'button' && (
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-foreground">Gateway Settings</span>
+          <button
+            onClick={handleCancel}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* URL Input */}
       <div className="flex flex-col gap-1.5">
@@ -237,7 +244,7 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
               : 'border-border text-muted-foreground hover:text-foreground'
           )}
         >
-          Basic Test
+          Basic
         </button>
         <button
           onClick={() => { setTestMode('full'); setTestResult(null); }}
@@ -249,7 +256,7 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
               : 'border-border text-muted-foreground hover:text-foreground'
           )}
         >
-          Full Test
+          Full
         </button>
       </div>
 
@@ -270,24 +277,24 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
           testing 
             ? 'border-border text-muted-foreground' 
             : testMode === 'full'
-              ? 'border-amber-500 text-amber-700 hover:bg-amber-50'
+              ? 'border-amber-500 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30'
               : 'border-foreground text-foreground hover:bg-foreground hover:text-background'
         )}
       >
         {testing ? (
           <>
             <Loader2 className="w-3 h-3 animate-spin" />
-            <span>Testing {testMode}...</span>
+            <span>Testing...</span>
           </>
         ) : testMode === 'full' ? (
           <>
             <Zap className="w-3 h-3" />
-            <span>Test Full Connection</span>
+            <span>Test Full</span>
           </>
         ) : (
           <>
             <TestTube className="w-3 h-3" />
-            <span>Test Basic Connection</span>
+            <span>Test Basic</span>
           </>
         )}
       </button>
@@ -297,8 +304,8 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
         <div className={cn(
           'px-3 py-2.5 text-xs font-mono space-y-1',
           testResult.success 
-            ? 'border border-green-500/30 bg-green-500/10 text-green-700' 
-            : 'border border-red-500/30 bg-red-500/10 text-red-700'
+            ? 'border border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400' 
+            : 'border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400'
         )}>
           <div className="font-medium">{testResult.message}</div>
           {testResult.stage && (

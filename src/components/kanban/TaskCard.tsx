@@ -10,11 +10,11 @@ interface TaskCardProps {
   onClick?: (task: Task) => void;
 }
 
-// Status indicator colors (monochrome)
+// Status indicator colors - using semantic colors for dark mode support
 const statusStyles: Record<TaskStatus, string> = {
-  'todo': 'bg-neutral-400',
-  'in-progress': 'bg-neutral-600',
-  'done': 'bg-neutral-900',
+  'todo': 'bg-muted-foreground/40',
+  'in-progress': 'bg-muted-foreground/70',
+  'done': 'bg-foreground',
 };
 
 export function TaskCard({ task, onClick }: TaskCardProps) {
@@ -63,20 +63,17 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       onClick={() => onClick?.(task)}
       className={cn(
         // Base styles - wireframe box
-        'group relative bg-white border border-neutral-300',
+        'group relative bg-card border border-border',
         'p-4 cursor-grab active:cursor-grabbing',
         'transition-all duration-150 ease-out',
-        'hover:border-neutral-500 hover:bg-neutral-50',
+        'hover:border-border-strong hover:bg-accent',
         
         // Dragging state
         isDragging && [
           'scale-[1.02] z-50',
-          'border-neutral-900 shadow-none',
-          'bg-white',
-        ],
-        
-        // Sharp corners (0 radius per design system)
-        'rounded-none'
+          'border-foreground shadow-none',
+          'bg-card',
+        ]
       )}
     >
       {/* Status indicator bar - top */}
@@ -98,27 +95,27 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           )} />
           
           {/* Title */}
-          <h3 className="text-sm font-medium text-neutral-900 leading-tight flex-1">
+          <h3 className="text-sm font-medium text-foreground leading-tight flex-1">
             {task.title}
           </h3>
         </div>
         
         {/* Description */}
         {task.description && (
-          <p className="text-xs text-neutral-500 line-clamp-2 leading-relaxed ml-4">
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed ml-4">
             {truncateDescription(task.description)}
           </p>
         )}
         
         {/* Footer - metadata */}
-        <div className="flex items-center justify-between mt-1 pt-2 border-t border-neutral-200">
+        <div className="flex items-center justify-between mt-1 pt-2 border-t border-border">
           {/* Project tag */}
-          <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-wider">
+          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
             {task.project}
           </span>
           
           {/* Date */}
-          <span className="text-[10px] font-mono text-neutral-400">
+          <span className="text-[10px] font-mono text-muted-foreground">
             {formatDate(task.updated)}
           </span>
         </div>
@@ -131,7 +128,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           height="12" 
           viewBox="0 0 12 12" 
           fill="none"
-          className="text-neutral-400"
+          className="text-muted-foreground"
         >
           <circle cx="2" cy="2" r="1" fill="currentColor" />
           <circle cx="6" cy="2" r="1" fill="currentColor" />

@@ -181,14 +181,14 @@ export function KanbanBoard() {
               <div
                 key={i}
                 className={cn(
-                  'w-2 h-8 bg-neutral-300',
+                  'w-2 h-8 bg-muted',
                   'animate-pulse'
                 )}
                 style={{ animationDelay: `${i * 150}ms` }}
               />
             ))}
           </div>
-          <span className="text-xs font-mono text-neutral-400 uppercase tracking-wider">
+          <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
             Loading tasks...
           </span>
         </div>
@@ -200,15 +200,15 @@ export function KanbanBoard() {
   if (tasksError) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-4 max-w-md text-center p-6 border border-neutral-300">
-          <div className="w-8 h-8 border border-neutral-900 flex items-center justify-center">
-            <span className="text-lg">!</span>
+        <div className="flex flex-col items-center gap-4 max-w-md text-center p-6 border border-border bg-card">
+          <div className="w-8 h-8 border border-foreground flex items-center justify-center">
+            <span className="text-lg text-foreground">!</span>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-neutral-900 mb-1">
+            <h3 className="text-sm font-semibold text-foreground mb-1">
               Error Loading Tasks
             </h3>
-            <p className="text-xs text-neutral-500 font-mono">
+            <p className="text-xs text-muted-foreground font-mono">
               {tasksError}
             </p>
           </div>
@@ -216,8 +216,8 @@ export function KanbanBoard() {
             onClick={() => loadTasks()}
             className={cn(
               'px-4 py-2 text-xs font-medium',
-              'border border-neutral-900 text-neutral-900',
-              'hover:bg-neutral-900 hover:text-white',
+              'border border-foreground text-foreground',
+              'hover:bg-foreground hover:text-background',
               'transition-colors duration-150',
               'rounded-none'
             )}
@@ -232,12 +232,12 @@ export function KanbanBoard() {
   return (
     <div className="h-full flex flex-col">
       {/* Board header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-neutral-900">
+          <h1 className="text-lg font-semibold text-foreground">
             Tasks
           </h1>
-          <span className="text-xs font-mono text-neutral-400">
+          <span className="text-xs font-mono text-muted-foreground">
             {localTasks.length} total
           </span>
         </div>
@@ -248,8 +248,8 @@ export function KanbanBoard() {
             onClick={() => loadTasks()}
             className={cn(
               'px-3 py-1.5 text-xs font-medium',
-              'border border-neutral-300 text-neutral-600',
-              'hover:border-neutral-500 hover:text-neutral-900',
+              'border border-border text-muted-foreground',
+              'hover:border-foreground hover:text-foreground',
               'transition-colors duration-150',
               'rounded-none'
             )}
@@ -292,15 +292,15 @@ export function KanbanBoard() {
       </div>
       
       {/* Status bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-neutral-200 bg-neutral-50/50">
-        <div className="flex items-center gap-4 text-xs font-mono text-neutral-400">
+      <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
+        <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
           <span>TODO: {taskCounts.todo}</span>
           <span>IN PROGRESS: {taskCounts['in-progress']}</span>
           <span>DONE: {taskCounts.done}</span>
         </div>
         
         {loadingTasks && (
-          <span className="text-xs font-mono text-neutral-400">
+          <span className="text-xs font-mono text-muted-foreground">
             Syncing...
           </span>
         )}

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { ChatWindow } from "@/components/chat";
 import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { Toaster } from "@/components/ui/Toaster";
@@ -10,25 +11,36 @@ import type { OnboardingResult } from "@/lib/onboarding";
 
 // Real components from agents C & D
 import { KanbanBoard } from "@/components/kanban";
-import { ChatPanel } from "@/components/chat";
 
 interface ClientPageProps {
   onboardingResult: OnboardingResult;
 }
 
 export default function ClientPage({ onboardingResult }: ClientPageProps) {
+  // Layout state
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Handle responsive sidebar
+  // Handle responsive behavior
   useEffect(() => {
     const checkMobile = () => {
       const mobile = window.innerWidth < 1024;
+      const smallScreen = window.innerWidth < 1280;
       setIsMobile(mobile);
+      
+      // Auto-close panels on smaller screens
       if (mobile) {
         setSidebarOpen(false);
-      } else {
+        setChatOpen(false);
+      } else if (smallScreen) {
+        // On medium screens, keep one panel open
+        setChatOpen(false);
         setSidebarOpen(true);
+      } else {
+        // Large screens - both open
+        setSidebarOpen(true);
+        setChatOpen(true);
       }
     };
 
@@ -51,26 +63,77 @@ export default function ClientPage({ onboardingResult }: ClientPageProps) {
   }, [onboardingResult]);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background overflow-hidden">
       {/* Header */}
       <Header 
         onMenuClick={() => setSidebarOpen(!sidebarOpen)} 
         sidebarOpen={sidebarOpen}
+        onChatClick={() => setChatOpen(!chatOpen)}
+        chatOpen={chatOpen}
       />
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar 
+        {/* App Sidebar - Navigation, Settings, Theme */}
+        <AppSidebar 
           isOpen={sidebarOpen} 
           onClose={() => setSidebarOpen(false)}
           isMobile={isMobile}
+          chatOpen={chatOpen}
+          onToggleChat={() => setChatOpen(!chatOpen)}
         />
 
-        {/* Three-column layout */}
+        {/* Content area with Chat Window + Kanban */}
         <main className="flex flex-1 overflow-hidden">
-          {/* Kanban Area - flexible width */}
-          <div className="flex flex-1 flex-col border-r border-border min-w-0">
+          {/* Chat Window - Collapsible panel on the left */}
+          {chatOpen && (
+            <div className="flex-shrink-0 h-full">
+              <ErrorBoundary
+                fallback={
+                  <div className="flex h-full w-[300px] items-center justify-center p-8 border-r border-border bg-background">
+                    <div className="text-center">
+                      <p className="text-destructive font-mono text-sm">Chat Error</p>
+                      <p className="text-muted-foreground mt-2 text-xs">Something went wrong loading chat</p>
+                    </div>
+                  </div>
+                }
+              >
+                <ChatWindow 
+                  isOpen={chatOpen} 
+                  onToggle={() => setChatOpen(!chatOpen)}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {/* Mobile: Chat overlay */}
+          {!chatOpen && !isMobile && (
+            <div className="flex-shrink-0 h-full">
+              <ChatWindow 
+                isOpen={false} 
+                onToggle={() => setChatOpen(true)}
+              />
+            </div>
+          )}
+
+          {/* Mobile Chat Overlay */}
+          {isMobile && chatOpen && (
+            <div className="fixed inset-0 z-40 flex">
+              <div 
+                className="flex-1 bg-black/50"
+                onClick={() => setChatOpen(false)}
+              />
+              <div className="w-[90vw] max-w-[400px] h-full bg-background shadow-xl">
+                <ChatWindow 
+                  isOpen={true} 
+                  onToggle={() => setChatOpen(false)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Kanban Board - Main content */}
+          <div className="flex flex-1 flex-col min-w-0 bg-background">
             <ErrorBoundary 
               fallback={
                 <div className="flex h-full items-center justify-center p-8">
@@ -82,22 +145,6 @@ export default function ClientPage({ onboardingResult }: ClientPageProps) {
               }
             >
               <KanbanBoard />
-            </ErrorBoundary>
-          </div>
-
-          {/* Chat Panel - fixed 400px width */}
-          <div className="w-[400px] flex-shrink-0 hidden lg:flex flex-col bg-background">
-            <ErrorBoundary
-              fallback={
-                <div className="flex h-full items-center justify-center p-8">
-                  <div className="text-center">
-                    <p className="text-destructive font-mono text-sm">Chat Error</p>
-                    <p className="text-muted-foreground mt-2 text-xs">Something went wrong loading chat</p>
-                  </div>
-                </div>
-              }
-            >
-              <ChatPanel />
             </ErrorBoundary>
           </div>
         </main>
