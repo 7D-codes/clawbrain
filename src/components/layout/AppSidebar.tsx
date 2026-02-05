@@ -19,11 +19,13 @@ import {
   HelpCircle, 
   Settings,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Activity
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeSelector } from '@/components/theme';
 import { GatewaySettings } from '@/components/chat/GatewaySettings';
+import { GatewayDiagnostics } from '@/components/chat/GatewayDiagnostics';
 import { cn } from '@/lib/utils';
 
 interface AppSidebarProps {
@@ -56,6 +58,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const [selectedProject, setSelectedProject] = useState('clawbrain');
   const [showSettings, setShowSettings] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const navItems: NavItem[] = [
     { 
@@ -207,6 +210,36 @@ export function AppSidebar({
                   }}
                 />
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Diagnostics Section */}
+        <div className="border-t border-border">
+          <button
+            onClick={() => setShowDiagnostics(!showDiagnostics)}
+            className={cn(
+              'flex w-full items-center justify-between px-3 py-2 text-sm font-mono',
+              'border-b border-border',
+              showDiagnostics
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground hover:bg-sidebar-accent'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <Activity className="h-4 w-4" />
+              <span>Diagnostics</span>
+            </div>
+            {showDiagnostics ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </button>
+
+          {showDiagnostics && (
+            <div className="p-2 border-b border-border bg-background/50 max-h-[400px] overflow-auto">
+              <GatewayDiagnostics />
             </div>
           )}
         </div>
