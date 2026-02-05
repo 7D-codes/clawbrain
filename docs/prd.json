@@ -43,7 +43,7 @@
       "UUID-only task IDs",
       "Proper error handling"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {
@@ -115,7 +115,7 @@
       "Last-write-wins strategy for MVP",
       "Graceful handling of external modifications"
     ],
-    "status": "in_progress",
+    "status": "completed",
     "priority": "high"
   },
   {
