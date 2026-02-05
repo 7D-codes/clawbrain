@@ -213,5 +213,174 @@
     ],
     "status": "todo",
     "priority": "low"
+  },
+  {
+    "id": "CB-016",
+    "title": "Agent Assignment UI",
+    "description": "Right-click menu to assign tasks to specialized agents",
+    "acceptance": [
+      "Right-click context menu on task cards",
+      "Agent selection dropdown (Research, Code, Writing, etc.)",
+      "Task assignment API endpoint",
+      "Visual indicator for assigned tasks",
+      "Agent type stored in task metadata"
+    ],
+    "status": "todo",
+    "priority": "high"
+  },
+  {
+    "id": "CB-017",
+    "title": "Agent Control Panel",
+    "description": "Panel to manage active agents and their configurations",
+    "acceptance": [
+      "Agent list showing active/inactive agents",
+      "Agent configuration (model, temperature, system prompt)",
+      "Start/stop agent buttons",
+      "Agent status indicators (idle, working, error)",
+      "Mono wireframe styling"
+    ],
+    "status": "todo",
+    "priority": "high"
+  },
+  {
+    "id": "CB-018",
+    "title": "Real-Time Agent Log Streaming",
+    "description": "Live log stream panel showing agent activity",
+    "acceptance": [
+      "Collapsible log panel component",
+      "WebSocket/SSE for real-time log updates",
+      "Log filtering by agent and level",
+      "Auto-scroll to latest logs",
+      "Export logs to file"
+    ],
+    "status": "todo",
+    "priority": "high"
+  },
+  {
+    "id": "CB-019",
+    "title": "Calendar View Component",
+    "description": "Calendar interface for scheduling and viewing tasks by date",
+    "acceptance": [
+      "Month/week/day view modes",
+      "Drag tasks to calendar to schedule",
+      "Due date visualization",
+      "Task cards rendered on calendar dates",
+      "Navigation between months/weeks"
+    ],
+    "status": "todo",
+    "priority": "high"
+  },
+  {
+    "id": "CB-020",
+    "title": "Due Date & Reminders",
+    "description": "Add due dates to tasks and show reminders",
+    "acceptance": [
+      "Due date field in task creation/editing",
+      "Overdue task highlighting",
+      "Reminder notifications",
+      "Sort/filter by due date",
+      "Calendar integration for due dates"
+    ],
+    "status": "todo",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-021",
+    "title": "Plugin Store UI",
+    "description": "Interface for discovering and installing plugins",
+    "acceptance": [
+      "Plugin discovery page with search",
+      "Plugin cards with description, version, rating",
+      "Install/uninstall buttons",
+      "Plugin settings panel",
+      "Installed plugins list"
+    ],
+    "status": "todo",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-022",
+    "title": "Plugin API & Loader",
+    "description": "System for loading and running plugins",
+    "acceptance": [
+      "Plugin manifest schema",
+      "Plugin loader with sandboxing",
+      "Plugin API for UI extensions",
+      "Plugin API for task actions",
+      "Hot-reload for development"
+    ],
+    "status": "todo",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-023",
+    "title": "ClawDeploy Integration",
+    "description": "One-click deploy to production via ClawDeploy",
+    "acceptance": [
+      "Deploy button in settings",
+      "ClawDeploy API integration",
+      "Deployment status monitoring",
+      "Environment variable configuration",
+      "Rollback capability"
+    ],
+    "status": "todo",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-024",
+    "title": "Deployment Configuration UI",
+    "description": "Settings panel for deployment options",
+    "acceptance": [
+      "Server configuration (region, size)",
+      "Environment variables editor",
+      "Domain/custom URL settings",
+      "SSL certificate management",
+      "Backup/restore settings"
+    ],
+    "status": "todo",
+    "priority": "medium"
+  },
+  {
+    "id": "CB-025",
+    "title": "AI Repair Bot",
+    "description": "Self-healing system that detects and fixes common issues",
+    "acceptance": [
+      "Health check monitoring (Gateway, files, skills)",
+      "Issue detection with diagnosis",
+      "One-click repair with AI assistance",
+      "Preventive maintenance suggestions",
+      "Repair history log"
+    ],
+    "status": "todo",
+    "priority": "high"
+  },
+  {
+    "id": "CB-026",
+    "title": "AI Task Enhancement",
+    "description": "Generative AI features for task editing",
+    "acceptance": [
+      "Expand/collapse task description buttons",
+      "Summarize task content",
+      "Clarify vague descriptions",
+      "Generate subtasks from parent task",
+      "Tone adjustment (professional, casual, etc.)"
+    ],
+    "status": "todo",
+    "priority": "low"
+  },
+  {
+    "id": "CB-027",
+    "title": "View Switcher & Navigation",
+    "description": "Unified navigation between Kanban, Calendar, List, and Agent views",
+    "acceptance": [
+      "View switcher in header/sidebar",
+      "Kanban view (existing)",
+      "Calendar view",
+      "List view",
+      "Agent control view",
+      "Persistent view state"
+    ],
+    "status": "todo",
+    "priority": "high"
   }
 ]
