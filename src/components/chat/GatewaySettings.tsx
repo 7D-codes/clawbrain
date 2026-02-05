@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Settings, Check, X, Eye, EyeOff } from 'lucide-react';
+import { Settings, Check, X, Eye, EyeOff, Loader2, TestTube } from 'lucide-react';
 
 interface GatewaySettingsProps {
   className?: string;
@@ -28,12 +28,50 @@ function getStoredSettings() {
   };
 }
 
+// Test WebSocket connection
+function testConnection(url: string): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(url);
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({ success: false, error: 'Connection timeout (5s)' });
+      }, 5000);
+
+      ws.onopen = () => {
+        clearTimeout(timeout);
+        ws.close();
+        resolve({ success: true });
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve({ success: false, error: 'WebSocket error - check if gateway is running' });
+      };
+
+      ws.onclose = (e) => {
+        clearTimeout(timeout);
+        if (e.code !== 1000 && e.code !== 1005) {
+          resolve({ success: false, error: `Connection closed (code: ${e.code})` });
+        }
+      };
+    } catch (err) {
+      resolve({ 
+        success: false, 
+        error: err instanceof Error ? err.message : 'Invalid WebSocket URL' 
+      });
+    }
+  });
+}
+
 export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [url, setUrl] = useState('ws://localhost:18789');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Load settings on mount
   useEffect(() => {
@@ -41,6 +79,21 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
     setUrl(settings.url);
     setPassword(settings.password);
   }, []);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    
+    const result = await testConnection(url);
+    
+    setTesting(false);
+    setTestResult({
+      success: result.success,
+      message: result.success 
+        ? 'Connection successful! Gateway is reachable.' 
+        : result.error || 'Connection failed'
+    });
+  };
 
   const handleSave = () => {
     localStorage.setItem('clawbrain_gateway_url', url);
@@ -59,6 +112,7 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
     const settings = getStoredSettings();
     setUrl(settings.url);
     setPassword(settings.password);
+    setTestResult(null);
     setIsOpen(false);
   };
 
@@ -82,39 +136,45 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
   }
 
   return (
-    <div className={cn('flex flex-col gap-3 p-3 border border-border bg-background', className)}>
+    <div className={cn('flex flex-col gap-3 p-4 border border-border bg-background min-w-[320px]', className)}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground">Gateway Settings</span>
+        <span className="text-sm font-medium text-foreground">Gateway Settings</span>
         <button
           onClick={handleCancel}
           className="text-muted-foreground hover:text-foreground"
         >
-          <X className="w-3 h-3" />
+          <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* URL Input */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-mono text-muted-foreground uppercase">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
           WebSocket URL
         </label>
         <input
           type="text"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setTestResult(null);
+          }}
           placeholder="ws://localhost:18789"
           className={cn(
-            'px-2 py-1.5 text-xs font-mono',
+            'px-3 py-2 text-xs font-mono',
             'border border-border bg-background',
             'focus:outline-none focus:border-foreground',
             'text-foreground placeholder:text-muted-foreground'
           )}
         />
+        <p className="text-[10px] text-muted-foreground">
+          Format: ws://host:port or wss://host:port
+        </p>
       </div>
 
       {/* Password Input */}
-      <div className="flex flex-col gap-1">
-        <label className="text-[10px] font-mono text-muted-foreground uppercase">
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
           Password (optional)
         </label>
         <div className="relative">
@@ -124,7 +184,7 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter gateway password"
             className={cn(
-              'w-full px-2 py-1.5 text-xs font-mono',
+              'w-full px-3 py-2 text-xs font-mono',
               'border border-border bg-background',
               'focus:outline-none focus:border-foreground',
               'text-foreground placeholder:text-muted-foreground'
@@ -139,17 +199,53 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
         </div>
       </div>
 
+      {/* Test Connection Button */}
+      <button
+        onClick={handleTest}
+        disabled={testing}
+        className={cn(
+          'flex items-center justify-center gap-1.5 px-3 py-2',
+          'text-xs font-mono border transition-colors',
+          testing 
+            ? 'border-border text-muted-foreground' 
+            : 'border-foreground text-foreground hover:bg-foreground hover:text-background'
+        )}
+      >
+        {testing ? (
+          <>
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Testing...</span>
+          </>
+        ) : (
+          <>
+            <TestTube className="w-3 h-3" />
+            <span>Test Connection</span>
+          </>
+        )}
+      </button>
+
+      {/* Test Result */}
+      {testResult && (
+        <div className={cn(
+          'px-3 py-2 text-xs font-mono',
+          testResult.success 
+            ? 'border border-green-500/30 bg-green-500/10 text-green-700' 
+            : 'border border-red-500/30 bg-red-500/10 text-red-700'
+        )}>
+          {testResult.message}
+        </div>
+      )}
+
       {/* Save Button */}
       <button
         onClick={handleSave}
         disabled={saved}
         className={cn(
-          'flex items-center justify-center gap-1.5 px-3 py-1.5',
-          'text-xs font-mono',
+          'flex items-center justify-center gap-1.5 px-3 py-2',
+          'text-xs font-mono transition-colors',
           saved
             ? 'bg-green-500/20 text-green-600 border border-green-500/50'
-            : 'bg-foreground text-background hover:bg-foreground/90',
-          'transition-colors'
+            : 'bg-foreground text-background hover:bg-foreground/90 border border-foreground'
         )}
       >
         {saved ? (
@@ -163,12 +259,17 @@ export function GatewaySettings({ className, onSave }: GatewaySettingsProps) {
       </button>
 
       {/* Help Text */}
-      <p className="text-[10px] font-mono text-muted-foreground">
-        Default: ws://localhost:18789
-      </p>
+      <div className="space-y-1 pt-2 border-t border-border">
+        <p className="text-[10px] font-mono text-muted-foreground">
+          Default: ws://localhost:18789
+        </p>
+        <p className="text-[10px] text-muted-foreground">
+          Make sure OpenClaw Gateway is running before connecting.
+        </p>
+      </div>
     </div>
   );
 }
 
 // Export settings for use in other components
-export { getStoredSettings };
+export { getStoredSettings, testConnection };

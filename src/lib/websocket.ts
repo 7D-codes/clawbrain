@@ -6,9 +6,10 @@
  * - Auth with Gateway password
  * - Session management (clawbrain:main:main)
  * - Message streaming support
+ * - Detailed connection diagnostics
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 
 // Gateway connection configuration
@@ -31,9 +32,19 @@ function getStoredPassword(): string {
   }
   return process.env.NEXT_PUBLIC_GATEWAY_PASSWORD || '';
 }
+
 const RECONNECT_INITIAL_DELAY = 1000;
 const RECONNECT_MAX_DELAY = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
+
+// Connection states for better UI feedback
+export type ConnectionState = 
+  | 'idle' 
+  | 'connecting' 
+  | 'authenticating'
+  | 'connected' 
+  | 'disconnected' 
+  | 'error';
 
 // Message types from Gateway protocol
 type GatewayMessage =
@@ -49,6 +60,16 @@ type GatewayResponse =
   | { type: 'auth_error'; error: string }
   | { type: 'joined'; sessionKey: string };
 
+// Debug log with timestamps
+function debugLog(message: string, data?: unknown) {
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  if (data) {
+    console.log(`[${timestamp}] [Gateway] ${message}`, data);
+  } else {
+    console.log(`[${timestamp}] [Gateway] ${message}`);
+  }
+}
+
 interface WebSocketState {
   ws: WebSocket | null;
   reconnectAttempts: number;
@@ -56,6 +77,8 @@ interface WebSocketState {
   isConnecting: boolean;
   isAuthenticated: boolean;
   messageQueue: string[];
+  connectionState: ConnectionState;
+  lastError: string | null;
 }
 
 class GatewayWebSocketClient {
@@ -66,11 +89,15 @@ class GatewayWebSocketClient {
     isConnecting: false,
     isAuthenticated: false,
     messageQueue: [],
+    connectionState: 'idle',
+    lastError: null,
   };
 
   private password: string | null = null;
   private listeners: Set<(connected: boolean) => void> = new Set();
+  private stateListeners: Set<(state: ConnectionState) => void> = new Set();
   private messageListeners: Set<(data: GatewayResponse) => void> = new Set();
+  private errorListeners: Set<(error: string) => void> = new Set();
 
   // Get current connection status
   isConnected(): boolean {
@@ -80,6 +107,16 @@ class GatewayWebSocketClient {
   // Check if currently connecting
   isConnecting(): boolean {
     return this.state.isConnecting;
+  }
+
+  // Get connection state
+  getConnectionState(): ConnectionState {
+    return this.state.connectionState;
+  }
+
+  // Get last error
+  getLastError(): string | null {
+    return this.state.lastError;
   }
 
   // Set the password for authentication
@@ -97,64 +134,98 @@ class GatewayWebSocketClient {
     return getStoredPassword();
   }
 
+  // Update connection state and notify listeners
+  private setConnectionState(state: ConnectionState) {
+    this.state.connectionState = state;
+    this.stateListeners.forEach(listener => listener(state));
+  }
+
   // Connect to Gateway
   connect(): void {
     if (this.state.isConnecting || this.isConnected()) {
+      debugLog('Already connecting or connected, skipping');
       return;
     }
 
     this.state.isConnecting = true;
+    this.state.lastError = null;
+    this.setConnectionState('connecting');
     this.notifyListeners();
 
+    const url = getGatewayUrl();
+    debugLog(`Connecting to ${url}...`);
+
     try {
-      const ws = new WebSocket(getGatewayUrl());
+      const ws = new WebSocket(url);
 
       ws.onopen = () => {
-        console.log('[GatewayWebSocket] Connected, sending auth...');
+        debugLog('WebSocket opened, sending auth...');
+        this.setConnectionState('authenticating');
+        
         // Send auth message immediately on connect
+        const password = this.getPassword();
         const authMessage: GatewayMessage = {
           type: 'auth',
           params: {
             auth: {
-              password: this.getPassword(),
+              password,
             },
           },
         };
-        ws.send(JSON.stringify(authMessage));
+        
+        try {
+          ws.send(JSON.stringify(authMessage));
+          debugLog('Auth message sent');
+        } catch (err) {
+          debugLog('Failed to send auth message:', err);
+          this.handleError('Failed to send auth message');
+        }
       };
 
       ws.onmessage = (event) => {
         try {
           const data: GatewayResponse = JSON.parse(event.data);
+          debugLog('Received message:', data.type);
           this.handleMessage(data);
         } catch (err) {
-          console.error('[GatewayWebSocket] Failed to parse message:', err);
+          debugLog('Failed to parse message:', err);
+          this.handleError('Invalid message format from gateway');
         }
       };
 
       ws.onclose = (event) => {
-        console.log('[GatewayWebSocket] Disconnected:', event.code, event.reason);
+        debugLog(`WebSocket closed: code=${event.code}, reason=${event.reason || 'none'}`);
         this.handleDisconnect();
       };
 
       ws.onerror = (error) => {
-        console.error('[GatewayWebSocket] Error:', error);
+        debugLog('WebSocket error:', error);
+        this.handleError('Connection failed - check if gateway is running');
         // Error will trigger onclose, which handles reconnect
       };
 
       this.state.ws = ws;
     } catch (err) {
-      console.error('[GatewayWebSocket] Failed to connect:', err);
+      debugLog('Failed to create WebSocket:', err);
       this.state.isConnecting = false;
+      this.handleError(err instanceof Error ? err.message : 'Failed to create connection');
       this.scheduleReconnect();
     }
+  }
+
+  // Handle errors
+  private handleError(error: string) {
+    this.state.lastError = error;
+    this.setConnectionState('error');
+    this.errorListeners.forEach(listener => listener(error));
+    this.notifyListeners();
   }
 
   // Handle incoming messages
   private handleMessage(data: GatewayResponse): void {
     switch (data.type) {
       case 'auth_success':
-        console.log('[GatewayWebSocket] Auth successful, joining session...');
+        debugLog('Auth successful, joining session...');
         this.state.isAuthenticated = true;
         // Join the session after auth
         this.send({
@@ -165,16 +236,18 @@ class GatewayWebSocketClient {
         break;
 
       case 'auth_error':
-        console.error('[GatewayWebSocket] Auth failed:', data.error);
+        debugLog('Auth failed:', data.error);
         this.state.isAuthenticated = false;
+        this.handleError(`Authentication failed: ${data.error}`);
         // Don't reconnect on auth error - need correct password
         this.disconnect();
         break;
 
       case 'joined':
-        console.log('[GatewayWebSocket] Joined session:', data.sessionKey);
+        debugLog(`Joined session: ${data.sessionKey}`);
         this.state.isConnecting = false;
         this.state.reconnectAttempts = 0;
+        this.setConnectionState('connected');
         this.notifyListeners();
         // Send any queued messages
         this.flushMessageQueue();
@@ -188,17 +261,27 @@ class GatewayWebSocketClient {
         break;
 
       default:
-        console.log('[GatewayWebSocket] Received:', data);
+        debugLog('Received unknown message type:', data);
     }
   }
 
   // Handle disconnection
   private handleDisconnect(): void {
+    const wasConnected = this.isConnected();
     this.state.ws = null;
     this.state.isConnecting = false;
     this.state.isAuthenticated = false;
+    
+    if (wasConnected) {
+      this.setConnectionState('disconnected');
+    }
+    
     this.notifyListeners();
-    this.scheduleReconnect();
+    
+    // Only reconnect if we were connected or trying to connect
+    if (this.state.connectionState !== 'error') {
+      this.scheduleReconnect();
+    }
   }
 
   // Schedule reconnect with exponential backoff
@@ -208,7 +291,8 @@ class GatewayWebSocketClient {
     }
 
     if (this.state.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
-      console.log('[GatewayWebSocket] Max reconnect attempts reached');
+      debugLog('Max reconnect attempts reached');
+      this.handleError('Max reconnect attempts reached - check gateway status');
       return;
     }
 
@@ -217,7 +301,8 @@ class GatewayWebSocketClient {
       RECONNECT_MAX_DELAY
     );
 
-    console.log(`[GatewayWebSocket] Reconnecting in ${delay}ms (attempt ${this.state.reconnectAttempts + 1})`);
+    debugLog(`Reconnecting in ${delay}ms (attempt ${this.state.reconnectAttempts + 1}/${RECONNECT_MAX_ATTEMPTS})`);
+    this.setConnectionState('connecting');
 
     this.state.reconnectTimeout = setTimeout(() => {
       this.state.reconnectAttempts++;
@@ -228,7 +313,7 @@ class GatewayWebSocketClient {
   // Send a message to the Gateway
   send(message: GatewayMessage): boolean {
     if (!this.isConnected()) {
-      console.log('[GatewayWebSocket] Not connected, queueing message');
+      debugLog('Not connected, queueing message');
       this.state.messageQueue.push(JSON.stringify(message));
       return false;
     }
@@ -237,7 +322,7 @@ class GatewayWebSocketClient {
       this.state.ws?.send(JSON.stringify(message));
       return true;
     } catch (err) {
-      console.error('[GatewayWebSocket] Send failed:', err);
+      debugLog('Send failed:', err);
       this.state.messageQueue.push(JSON.stringify(message));
       return false;
     }
@@ -264,6 +349,8 @@ class GatewayWebSocketClient {
 
   // Disconnect and cleanup
   disconnect(): void {
+    debugLog('Disconnecting...');
+    
     if (this.state.reconnectTimeout) {
       clearTimeout(this.state.reconnectTimeout);
       this.state.reconnectTimeout = null;
@@ -278,6 +365,7 @@ class GatewayWebSocketClient {
     this.state.isAuthenticated = false;
     this.state.reconnectAttempts = 0;
     this.state.messageQueue = [];
+    this.setConnectionState('idle');
     this.notifyListeners();
   }
 
@@ -287,6 +375,20 @@ class GatewayWebSocketClient {
     // Immediately notify with current state
     listener(this.isConnected());
     return () => this.listeners.delete(listener);
+  }
+
+  // Subscribe to connection state changes
+  onStateChange(listener: (state: ConnectionState) => void): () => void {
+    this.stateListeners.add(listener);
+    // Immediately notify with current state
+    listener(this.state.connectionState);
+    return () => this.stateListeners.delete(listener);
+  }
+
+  // Subscribe to errors
+  onError(listener: (error: string) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
   }
 
   // Subscribe to incoming messages
@@ -322,7 +424,6 @@ export function resetGatewayClient(): void {
 // React hook for using the WebSocket client
 export function useGatewayWebSocket() {
   // Use individual selectors instead of the entire store object
-  // Wrap in useCallback to ensure stable identity across renders
   const setConnected = useChatStore(useCallback((state) => state.setConnected, []));
   const addMessage = useChatStore(useCallback((state) => state.addMessage, []));
   const appendToCurrentMessage = useChatStore(useCallback((state) => state.appendToCurrentMessage, []));
@@ -331,22 +432,37 @@ export function useGatewayWebSocket() {
   const setError = useChatStore(useCallback((state) => state.setError, []));
   const clearError = useChatStore(useCallback((state) => state.clearError, []));
   
-  // Select state values separately with stable selectors
-  const isConnected = useChatStore(useCallback((state) => state.isConnected, []));
-  const isLoading = useChatStore(useCallback((state) => state.isLoading, []));
-  const error = useChatStore(useCallback((state) => state.error, []));
+  // Local state for connection details
+  const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   
   const clientRef = useRef(getGatewayClient());
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const messageUnsubscribeRef = useRef<(() => void) | null>(null);
+  const stateUnsubscribeRef = useRef<(() => void) | null>(null);
+  const errorUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Setup connection listener - stable dependencies
   useEffect(() => {
     const client = clientRef.current;
+    debugLog('Setting up WebSocket listeners');
 
     // Subscribe to connection changes
     unsubscribeRef.current = client.onConnectionChange((connected) => {
       setConnected(connected);
+    });
+
+    // Subscribe to state changes
+    stateUnsubscribeRef.current = client.onStateChange((state) => {
+      setConnectionState(state);
+      setReconnectAttempt(client['state'].reconnectAttempts);
+    });
+
+    // Subscribe to errors
+    errorUnsubscribeRef.current = client.onError((error) => {
+      setConnectionError(error);
+      setError(error);
     });
 
     // Subscribe to messages
@@ -369,12 +485,16 @@ export function useGatewayWebSocket() {
 
     // Try to connect if not already connected
     if (!client.isConnected() && !client.isConnecting()) {
+      debugLog('Initiating connection...');
       client.connect();
     }
 
     return () => {
+      debugLog('Cleaning up WebSocket listeners');
       unsubscribeRef.current?.();
       messageUnsubscribeRef.current?.();
+      stateUnsubscribeRef.current?.();
+      errorUnsubscribeRef.current?.();
     };
   }, [setConnected, appendToCurrentMessage, finalizeCurrentMessage, setError]);
 
@@ -390,30 +510,42 @@ export function useGatewayWebSocket() {
     // Set loading state
     setLoading(true);
     clearError();
+    setConnectionError(null);
 
     // Send via WebSocket
     const sent = clientRef.current.sendMessage(text);
 
     if (!sent) {
-      // Message was queued, will be sent when connected
-      console.log('[useGatewayWebSocket] Message queued for delivery');
+      debugLog('Message queued for delivery');
     }
   }, [addMessage, setLoading, clearError]);
 
   const reconnect = useCallback(() => {
-    clientRef.current.connect();
+    debugLog('Manual reconnect triggered');
+    setConnectionError(null);
+    clientRef.current.disconnect();
+    // Small delay to ensure disconnect completes
+    setTimeout(() => clientRef.current.connect(), 100);
   }, []);
 
   const setPassword = useCallback((password: string) => {
     clientRef.current.setPassword(password);
   }, []);
 
+  const disconnect = useCallback(() => {
+    clientRef.current.disconnect();
+  }, []);
+
   return {
-    isConnected,
-    isLoading,
-    error,
+    isConnected: clientRef.current.isConnected(),
+    connectionState,
+    connectionError,
+    reconnectAttempt,
+    isLoading: useChatStore(useCallback((state) => state.isLoading, [])),
+    error: useChatStore(useCallback((state) => state.error, [])),
     sendMessage,
     reconnect,
+    disconnect,
     setPassword,
   };
 }
