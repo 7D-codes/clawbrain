@@ -33,6 +33,125 @@ function getStoredPassword(): string {
   return process.env.NEXT_PUBLIC_GATEWAY_PASSWORD || '';
 }
 
+// Test full connection including auth
+function testFullConnection(
+  url: string, 
+  password: string
+): Promise<{ 
+  success: boolean; 
+  stage: 'connect' | 'auth' | 'join' | 'success';
+  error?: string;
+  details?: string;
+}> {
+  return new Promise((resolve) => {
+    let stage: 'connect' | 'auth' | 'join' | 'success' = 'connect';
+    let ws: WebSocket | null = null;
+    
+    const timeout = setTimeout(() => {
+      if (ws) ws.close();
+      resolve({ 
+        success: false, 
+        stage, 
+        error: `Timeout at stage: ${stage}`,
+        details: stage === 'connect' 
+          ? 'WebSocket failed to open within 5 seconds' 
+          : stage === 'auth' 
+            ? 'No auth response received' 
+            : 'No session join response received'
+      });
+    }, 10000);
+
+    try {
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        stage = 'auth';
+        // Send auth message
+        const authMessage = {
+          type: 'auth',
+          params: {
+            auth: { password },
+          },
+        };
+        ws?.send(JSON.stringify(authMessage));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'auth_success') {
+            stage = 'join';
+            // Send join message
+            const joinMessage = {
+              type: 'join',
+              sessionKey: SESSION_KEY,
+              label: 'main',
+            };
+            ws?.send(JSON.stringify(joinMessage));
+          } else if (data.type === 'auth_error') {
+            clearTimeout(timeout);
+            ws?.close();
+            resolve({ 
+              success: false, 
+              stage: 'auth', 
+              error: `Auth failed: ${data.error}`,
+              details: 'The gateway rejected the password. Check your password in settings.'
+            });
+          } else if (data.type === 'joined') {
+            clearTimeout(timeout);
+            ws?.close();
+            resolve({ success: true, stage: 'success' });
+          }
+        } catch (err) {
+          clearTimeout(timeout);
+          ws?.close();
+          resolve({ 
+            success: false, 
+            stage, 
+            error: 'Invalid message format',
+            details: err instanceof Error ? err.message : 'Unknown error'
+          });
+        }
+      };
+
+      ws.onerror = (e) => {
+        clearTimeout(timeout);
+        resolve({ 
+          success: false, 
+          stage, 
+          error: stage === 'connect' ? 'Connection failed' : 'WebSocket error',
+          details: stage === 'connect' 
+            ? 'Could not establish WebSocket connection. Check if gateway is running.'
+            : 'Error during communication'
+        });
+      };
+
+      ws.onclose = (e) => {
+        clearTimeout(timeout);
+        if (stage !== 'success') {
+          resolve({ 
+            success: false, 
+            stage, 
+            error: `Connection closed (code: ${e.code})`,
+            details: stage === 'connect' 
+              ? 'WebSocket closed before auth. Gateway may require authentication.'
+              : `Closed during ${stage} stage`
+          });
+        }
+      };
+    } catch (err) {
+      clearTimeout(timeout);
+      resolve({ 
+        success: false, 
+        stage: 'connect', 
+        error: 'Failed to create WebSocket',
+        details: err instanceof Error ? err.message : 'Invalid URL'
+      });
+    }
+  });
+}
+
 const RECONNECT_INITIAL_DELAY = 1000;
 const RECONNECT_MAX_DELAY = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
@@ -551,4 +670,4 @@ export function useGatewayWebSocket() {
 }
 
 export type { GatewayResponse, GatewayMessage };
-export { GatewayWebSocketClient, SESSION_KEY, getGatewayUrl };
+export { GatewayWebSocketClient, SESSION_KEY, getGatewayUrl, testFullConnection };
