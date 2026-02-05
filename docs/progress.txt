@@ -258,3 +258,32 @@
 - Uses existing button, separator, tooltip from shadcn/ui
 - Uses lucide-react for icons (Menu, Plus, Settings, Wifi, WifiOff, etc.)
 - No additional dependencies required
+
+## 2026-02-05 - Integration & Build
+
+### Completed: Final Integration
+
+**Integration work:**
+1. Updated `src/app/client-page.tsx` to import real components:
+   - `import { KanbanBoard } from "@/components/kanban"`
+   - `import { ChatPanel } from "@/components/chat"`
+
+2. Fixed file-watcher.ts to work in client components:
+   - Removed chokidar import from client-side code
+   - Created separate `file-watcher-server.ts` for server-side usage
+   - Client-side uses polling-based watching (5s interval)
+
+3. Build verification:
+   - `bun run build` passes successfully
+   - No TypeScript errors
+   - No bundling errors
+   - Static generation completed for all routes
+
+**Routes generated:**
+- `/` - Main dashboard (static)
+- `/api/tasks` - Task list API (dynamic)
+- `/api/tasks/[id]` - Individual task API (dynamic)
+
+### MVP Status: ✅ COMPLETE
+
+All high priority stories (CB-001 through CB-011) implemented and build passing.

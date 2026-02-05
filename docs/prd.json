@@ -130,7 +130,8 @@
       "View switcher (Kanban only for MVP)"
     ],
     "status": "completed",
-    "priority": "medium"
+    "priority": "medium",
+    "completedAt": "2026-02-05"
   },
   {
     "id": "CB-010",
@@ -144,7 +145,8 @@
       "README with setup instructions"
     ],
     "status": "completed",
-    "priority": "medium"
+    "priority": "medium",
+    "completedAt": "2026-02-05"
   },
   {
     "id": "CB-011",
@@ -158,7 +160,8 @@
       "Toast notifications for errors"
     ],
     "status": "completed",
-    "priority": "medium"
+    "priority": "medium",
+    "completedAt": "2026-02-05"
   },
   {
     "id": "CB-012",
