@@ -1,8 +1,28 @@
-"use client";
+/**
+ * Sidebar - Combined navigation and chat
+ * 
+ * Contains:
+ * - Chat panel (primary)
+ * - Quick navigation
+ * - Settings (compact)
+ */
 
-import { useState } from "react";
-import { X, FolderKanban, LayoutGrid, MessageSquare, HelpCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+'use client';
+
+import { useState } from 'react';
+import { 
+  X, 
+  LayoutGrid, 
+  MessageSquare, 
+  Settings,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ChatWindow } from '@/components/chat/ChatWindow';
+import { ThemeSelector } from '@/components/theme';
+import { GatewaySettings } from '@/components/chat/GatewaySettings';
+import { cn } from '@/lib/utils';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,27 +30,15 @@ interface SidebarProps {
   isMobile: boolean;
 }
 
-interface NavItem {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  active?: boolean;
-}
-
-const navItems: NavItem[] = [
-  { id: "kanban", label: "Board", icon: <LayoutGrid className="h-4 w-4" />, active: true },
-  { id: "chat", label: "Chat", icon: <MessageSquare className="h-4 w-4" /> },
-];
-
 const projects = [
-  { id: "clawbrain", name: "clawbrain", taskCount: 12 },
-  { id: "demo", name: "demo-project", taskCount: 3 },
+  { id: 'clawbrain', name: 'clawbrain', taskCount: 12 },
+  { id: 'demo', name: 'demo-project', taskCount: 3 },
 ];
 
 export function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
-  const [selectedProject, setSelectedProject] = useState("clawbrain");
+  const [selectedProject, setSelectedProject] = useState('clawbrain');
+  const [showSettings, setShowSettings] = useState(false);
 
-  // Don't render if closed
   if (!isOpen) {
     return null;
   }
@@ -48,10 +56,12 @@ export function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
 
       {/* Sidebar */}
       <aside 
-        className={`
-          ${isMobile ? 'fixed left-0 top-14 z-50 h-[calc(100vh-3.5rem)]' : 'relative h-full'}
-          w-[240px] flex-shrink-0 border-r border-border bg-sidebar flex flex-col
-        `}
+        className={cn(
+          isMobile 
+            ? 'fixed left-0 top-12 z-50 h-[calc(100vh-3rem)] w-[90vw] max-w-[400px]' 
+            : 'relative h-full w-[380px]',
+          'flex-shrink-0 border-r border-border bg-background flex flex-col'
+        )}
       >
         {/* Mobile close button */}
         {isMobile && (
@@ -60,77 +70,69 @@ export function Sidebar({ isOpen, onClose, isMobile }: SidebarProps) {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="h-7 w-7 border border-border hover:bg-sidebar-accent"
+              className="h-7 w-7"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         )}
 
-        {/* Navigation */}
-        <nav className="border-b border-border p-2">
-          <ul className="space-y-1">
-            {navItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  className={`
-                    flex w-full items-center gap-3 px-3 py-2 text-sm font-mono
-                    border border-transparent
-                    ${item.active 
-                      ? 'bg-sidebar-accent border-border text-sidebar-accent-foreground' 
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:border-border'
-                    }
-                  `}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {/* Projects section */}
-        <div className="flex-1 overflow-auto p-2">
-          <div className="mb-2 flex items-center justify-between px-3">
-            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">
-              Projects
-            </span>
-            <FolderKanban className="h-3 w-3 text-muted-foreground" />
-          </div>
-          
-          <ul className="space-y-1">
-            {projects.map((project) => (
-              <li key={project.id}>
-                <button
-                  onClick={() => setSelectedProject(project.id)}
-                  className={`
-                    flex w-full items-center justify-between px-3 py-2 text-sm font-mono
-                    border border-transparent
-                    ${selectedProject === project.id
-                      ? 'bg-sidebar-accent border-border text-sidebar-accent-foreground' 
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:border-border'
-                    }
-                  `}
-                >
-                  <span className="truncate">{project.name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {project.taskCount}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        {/* Chat - Primary content */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <ChatWindow compact />
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-border p-2">
+        {/* Bottom section - Project selector + Settings */}
+        <div className="border-t border-border">
+          {/* Project selector */}
+          <div className="p-3 border-b border-border">
+            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">
+              Project
+            </div>
+            <select 
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-full bg-secondary border border-border px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.taskCount})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Collapsible Settings */}
           <button
-            className="flex w-full items-center gap-3 px-3 py-2 text-sm font-mono text-sidebar-foreground hover:bg-sidebar-accent border border-transparent hover:border-border"
+            onClick={() => setShowSettings(!showSettings)}
+            className={cn(
+              'flex w-full items-center justify-between px-3 py-2 text-sm font-mono',
+              'hover:bg-secondary transition-colors',
+              showSettings && 'bg-secondary'
+            )}
           >
-            <HelpCircle className="h-4 w-4" />
-            <span>Help & Support</span>
+            <div className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              <span>Settings</span>
+            </div>
+            {showSettings ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
           </button>
+
+          {showSettings && (
+            <div className="p-3 space-y-4 border-t border-border bg-secondary/30">
+              <ThemeSelector />
+              <div className="pt-2 border-t border-border">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase mb-2">
+                  Gateway
+                </div>
+                <GatewaySettings />
+              </div>
+            </div>
+          )}
         </div>
       </aside>
     </>

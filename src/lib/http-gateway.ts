@@ -123,12 +123,20 @@ export function useGatewayHTTP() {
   const abortRef = useRef<AbortController | null>(null);
   const configRef = useRef(getGatewayConfig());
 
-  // Test connection on mount
+  // Test connection on mount - only once
   useEffect(() => {
+    let mounted = true;
+    
     const test = async () => {
+      // Skip if already connected or tested
+      if (connectionState !== 'idle') return;
+      
       setConnectionState('connecting');
       const config = getGatewayConfig();
       const result = await testFullConnection(config.url, config.password, config.useProxy);
+      
+      if (!mounted) return;
+      
       if (result.success) {
         setConnectionState('connected');
         setConnected(true);
@@ -138,8 +146,14 @@ export function useGatewayHTTP() {
         setConnected(false);
       }
     };
+    
     test();
-  }, [setConnected]);
+    
+    return () => {
+      mounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount
 
   const sendMessage = useCallback(async (text: string) => {
     // Add user message

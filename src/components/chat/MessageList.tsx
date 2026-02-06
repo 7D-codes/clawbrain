@@ -137,79 +137,118 @@ function MessageItem({ message, showTimestamp, isLast }: MessageItemProps) {
 }
 
 function AssistantContent({ content }: { content: string }) {
+  // Handle empty content
+  if (!content || content.trim() === '') {
+    return <span className="text-muted-foreground italic">Thinking...</span>;
+  }
+
   // Simple markdown-like rendering for assistant messages
   const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBlockContent: string[] = [];
+  let codeBlockLang = '';
 
-  return (
-    <div className="space-y-2">
-      {lines.map((line, i) => {
-        // Heading
-        if (line.startsWith('# ')) {
-          return (
-            <h1 key={i} className="text-base font-semibold text-foreground">
-              {line.slice(2)}
-            </h1>
-          );
-        }
-        if (line.startsWith('## ')) {
-          return (
-            <h2 key={i} className="text-sm font-semibold text-foreground">
-              {line.slice(3)}
-            </h2>
-          );
-        }
-
-        // Code block
-        if (line.startsWith('```')) {
-          return null; // Handled by block detection below
-        }
-
-        // Bullet list
-        if (line.startsWith('- ') || line.startsWith('* ')) {
-          return (
-            <div key={i} className="flex items-start gap-2 pl-2">
-              <span className="text-muted-foreground mt-1.5">•</span>
-              <span className="text-muted-foreground">{line.slice(2)}</span>
-            </div>
-          );
-        }
-
-        // Empty line
-        if (line.trim() === '') {
-          return <div key={i} className="h-1" />;
-        }
-
-        // Inline code
-        const parts = line.split(/(`[^`]+`)/g);
-        if (parts.length > 1) {
-          return (
-            <p key={i} className="text-muted-foreground">
-              {parts.map((part, j) => {
-                if (part.startsWith('`') && part.endsWith('`')) {
-                  return (
-                    <code
-                      key={j}
-                      className="px-1 py-0.5 font-mono text-xs bg-secondary border border-border text-foreground"
-                    >
-                      {part.slice(1, -1)}
-                    </code>
-                  );
-                }
-                return <span key={j}>{part}</span>;
-              })}
-            </p>
-          );
-        }
-
-        // Regular paragraph
-        return (
-          <p key={i} className="text-muted-foreground">
-            {line}
-          </p>
+  lines.forEach((line, i) => {
+    // Code block handling
+    if (line.startsWith('```')) {
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeBlockLang = line.slice(3).trim();
+        codeBlockContent = [];
+      } else {
+        inCodeBlock = false;
+        elements.push(
+          <pre key={`code-${i}`} className="bg-secondary border border-border p-3 overflow-x-auto my-2">
+            <code className="font-mono text-xs text-foreground">
+              {codeBlockContent.join('\n')}
+            </code>
+          </pre>
         );
-      })}
-    </div>
-  );
+        codeBlockContent = [];
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeBlockContent.push(line);
+      return;
+    }
+
+    // Heading
+    if (line.startsWith('# ')) {
+      elements.push(
+        <h1 key={i} className="text-base font-semibold text-foreground mt-3 mb-2">
+          {line.slice(2)}
+        </h1>
+      );
+      return;
+    }
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={i} className="text-sm font-semibold text-foreground mt-2 mb-1">
+          {line.slice(3)}
+        </h2>
+      );
+      return;
+    }
+
+    // Bullet list
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      elements.push(
+        <div key={i} className="flex items-start gap-2 pl-2 my-1">
+          <span className="text-muted-foreground mt-1.5">•</span>
+          <span className="text-foreground">{renderInlineCode(line.slice(2))}</span>
+        </div>
+      );
+      return;
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      elements.push(<div key={i} className="h-2" />);
+      return;
+    }
+
+    // Regular paragraph with inline code support
+    elements.push(
+      <p key={i} className="text-foreground leading-relaxed my-1">
+        {renderInlineCode(line)}
+      </p>
+    );
+  });
+
+  // Handle unclosed code block
+  if (inCodeBlock && codeBlockContent.length > 0) {
+    elements.push(
+      <pre key="code-final" className="bg-secondary border border-border p-3 overflow-x-auto my-2">
+        <code className="font-mono text-xs text-foreground">
+          {codeBlockContent.join('\n')}
+        </code>
+      </pre>
+    );
+  }
+
+  return <div className="space-y-1">{elements}</div>;
+}
+
+function renderInlineCode(text: string): React.ReactNode {
+  const parts = text.split(/(`[^`]+`)/g);
+  if (parts.length === 1) return text;
+  
+  return parts.map((part, j) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={j}
+          className="px-1 py-0.5 font-mono text-xs bg-secondary border border-border text-foreground rounded"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <span key={j}>{part}</span>;
+  });
 }
 
 function QuickPrompt({ text }: { text: string }) {

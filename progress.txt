@@ -1,0 +1,46 @@
+# ClawBrain UI/UX Fixes - 2026-02-06
+
+## Issues Fixed
+
+### 1. Constant Refreshing / Re-render Loops
+**Problem:** `http-gateway.ts` connection test was running on every render due to `setConnected` in dependency array.
+
+**Fix:** 
+- Added mount guard to prevent state updates after unmount
+- Changed to run only once on mount with empty dependency array
+- Added `connectionState` check to skip if already tested
+
+### 2. Bot Messages Not Rendering
+**Problem:** `AssistantContent` component had broken code block parsing and was returning `null` for code blocks.
+
+**Fix:**
+- Rewrote `AssistantContent` with proper code block handling
+- Added support for multi-line code blocks
+- Fixed inline code rendering with `renderInlineCode` helper
+- Added "Thinking..." placeholder for empty content
+- Changed text color from `text-muted-foreground` to `text-foreground` for readability
+
+### 3. UI Clutter - Too Many Panels
+**Problem:** Layout had Header + AppSidebar + ChatWindow + Kanban all fighting for space with duplicate controls.
+
+**Fix:**
+- **Simplified layout:** Single sidebar that contains chat + navigation
+- **Cleaned Header:** Removed duplicate chat toggle, kept just menu + logo + new task
+- **New Sidebar component:** Combines chat, project selector, and collapsible settings
+- **Removed AppSidebar:** Replaced with cleaner unified Sidebar
+- **Kanban is now main content:** Takes full remaining space
+
+### Files Changed
+- `src/lib/http-gateway.ts` - Fixed useEffect dependency loop
+- `src/components/chat/MessageList.tsx` - Fixed AssistantContent rendering
+- `src/app/client-page.tsx` - Simplified layout structure
+- `src/components/layout/Header.tsx` - Cleaner header with fewer buttons
+- `src/components/layout/Sidebar.tsx` - NEW: Unified sidebar with chat
+- `src/components/layout/AppSidebar.tsx` - DELETED: Replaced by Sidebar
+- `src/components/layout/index.ts` - Updated exports
+
+## Result
+- No more constant refreshing
+- Bot messages render correctly
+- Clean, minimal UI with single sidebar
+- Chat integrated into sidebar panel
