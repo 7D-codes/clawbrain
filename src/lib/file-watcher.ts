@@ -23,7 +23,6 @@ export function useFileWatcher() {
     
     // Set new timeout
     timeoutRef.current = setTimeout(async () => {
-      console.log('[FileWatcher] Detected file change, refreshing tasks...');
       await refreshRef.current();
     }, 300);
   }, []); // No dependencies - uses ref for the actual function
