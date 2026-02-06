@@ -11,7 +11,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useGatewayWebSocket, getGatewayUrl, type ConnectionState } from '@/lib/websocket';
+import { useGatewayHTTP, getStoredSettings, type ConnectionState } from '@/lib/http-gateway';
 import { useChatStore, selectMessages, selectCurrentStreamingMessage } from '@/stores/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -40,20 +40,21 @@ export function ChatPanel({ className }: ChatPanelProps) {
     isLoading, 
     error, 
     reconnect 
-  } = useGatewayWebSocket();
+  } = useGatewayHTTP();
   
   const messages = useChatStore(selectMessages);
   const currentStreamingMessage = useChatStore(selectCurrentStreamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
-  const [gatewayUrl, setGatewayUrl] = useState('ws://localhost:18789');
+  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:18789');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const logsRef = useRef<HTMLDivElement>(null);
 
   // Get gateway URL on client side
   useEffect(() => {
-    setGatewayUrl(getGatewayUrl());
+    const cfg = getStoredSettings();
+    setGatewayUrl(cfg.url);
   }, []);
 
   // Capture console logs for diagnostics
@@ -181,7 +182,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
             <GatewaySettings 
               className="mr-1"
               onSave={() => {
-                setGatewayUrl(getGatewayUrl());
+                setGatewayUrl(getStoredSettings().url);
                 reconnect();
               }}
             />

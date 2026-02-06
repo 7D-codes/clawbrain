@@ -11,7 +11,7 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { useGatewayWebSocket } from '@/lib/websocket';
+import { useGatewayHTTP } from '@/lib/http-gateway';
 import { cn } from '@/lib/utils';
 import { Send, Loader2 } from 'lucide-react';
 
@@ -23,7 +23,7 @@ interface MessageInputProps {
 export function MessageInput({ disabled, className }: MessageInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { sendMessage, isLoading } = useGatewayWebSocket();
+  const { sendMessage, isLoading } = useGatewayHTTP();
 
   // Handle quick prompt events from MessageList
   useEffect(() => {

@@ -9,7 +9,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useGatewayWebSocket, getGatewayUrl, type ConnectionState } from '@/lib/websocket';
+import { useGatewayHTTP, getStoredSettings, testFullConnection, type ConnectionState } from '@/lib/http-gateway';
 import { useChatStore, selectMessages, selectCurrentStreamingMessage } from '@/stores/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -40,20 +40,21 @@ export function ChatWindow({ isOpen, onToggle, className }: ChatWindowProps) {
     isLoading, 
     error, 
     reconnect 
-  } = useGatewayWebSocket();
+  } = useGatewayHTTP();
   
   const messages = useChatStore(selectMessages);
   const currentStreamingMessage = useChatStore(selectCurrentStreamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
-  const [gatewayUrl, setGatewayUrl] = useState('ws://localhost:18789');
+  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:18789');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const logsRef = useRef<HTMLDivElement>(null);
 
   // Get gateway URL on client side
   useEffect(() => {
-    setGatewayUrl(getGatewayUrl());
+    const cfg = getStoredSettings();
+    setGatewayUrl(cfg.useProxy ? '/api/gateway (proxy)' : cfg.url);
   }, []);
 
   // Capture console logs for diagnostics
@@ -295,15 +296,11 @@ export function ChatWindow({ isOpen, onToggle, className }: ChatWindowProps) {
 
             {/* Quick Test */}
             <button
-              onClick={() => {
-                const ws = new WebSocket(gatewayUrl);
-                ws.onopen = () => {
-                  console.log('[Gateway] Test connection successful!');
-                  ws.close();
-                };
-                ws.onerror = (e) => {
-                  console.log('[Gateway] Test connection failed:', e);
-                };
+              onClick={async () => {
+                console.log('[Gateway] Testing HTTP connection...');
+                const settings = getStoredSettings();
+                const result = await testFullConnection(gatewayUrl, settings.password, settings.useProxy);
+                console.log('[Gateway] Test result:', result);
               }}
               className="w-full py-1 text-[10px] uppercase border border-green-500/30 text-green-400 hover:bg-green-500/10 transition-colors"
             >

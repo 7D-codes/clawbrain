@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Settings, Check, X, Eye, EyeOff, Loader2, TestTube, Zap } from 'lucide-react';
-import { testFullConnection } from '@/lib/websocket';
+import { testFullConnection } from '@/lib/http-gateway';
 
 interface GatewaySettingsProps {
   className?: string;
@@ -22,53 +22,45 @@ interface GatewaySettingsProps {
 // Get current settings from localStorage or defaults
 function getStoredSettings() {
   if (typeof window === 'undefined') {
-    return { url: 'ws://localhost:18789', password: '' };
+    return { url: 'http://localhost:18789', password: '', useProxy: false };
   }
+  const url = localStorage.getItem('clawbrain_gateway_url')?.replace('ws://', 'http://').replace('wss://', 'https://') || 'http://localhost:18789';
+  
+  // Determine if we need to use proxy (CORS avoidance)
+  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
+  const isDifferentPort = !url.includes(window.location.host);
+  const useProxy = isLocalhost && isDifferentPort;
+  
   return {
-    url: localStorage.getItem('clawbrain_gateway_url') || 'ws://localhost:18789',
+    url,
     password: localStorage.getItem('clawbrain_gateway_password') || '',
+    useProxy,
   };
 }
 
-// Simple WebSocket test (just checks if it opens)
-function testBasicConnection(url: string): Promise<{ success: boolean; error?: string }> {
-  return new Promise((resolve) => {
-    try {
-      const ws = new WebSocket(url);
-      const timeout = setTimeout(() => {
-        ws.close();
-        resolve({ success: false, error: 'Connection timeout (5s)' });
-      }, 5000);
-
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        ws.close();
-        resolve({ success: true });
-      };
-
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        resolve({ success: false, error: 'WebSocket error - check if gateway is running' });
-      };
-
-      ws.onclose = (e) => {
-        clearTimeout(timeout);
-        if (e.code !== 1000 && e.code !== 1005) {
-          resolve({ success: false, error: `Connection closed (code: ${e.code})` });
-        }
-      };
-    } catch (err) {
-      resolve({ 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Invalid WebSocket URL' 
-      });
+// Simple HTTP test (just checks if gateway responds)
+async function testBasicConnection(url: string, useProxy = false): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Use proxy to avoid CORS issues
+    const fetchUrl = useProxy ? '/api/gateway/v1/responses' : `${url}/v1/responses`;
+    const response = await fetch(fetchUrl, {
+      method: 'OPTIONS',
+    });
+    if (response.ok || response.status === 401 || response.status === 405) {
+      return { success: true };
     }
-  });
+    return { success: false, error: `HTTP ${response.status}` };
+  } catch (err) {
+    return { 
+      success: false, 
+      error: err instanceof Error ? err.message : 'Connection failed - check if gateway is running' 
+    };
+  }
 }
 
 export function GatewaySettings({ className, onSave, variant = 'button' }: GatewaySettingsProps) {
   const [isOpen, setIsOpen] = useState(variant === 'panel');
-  const [url, setUrl] = useState('ws://localhost:18789');
+  const [url, setUrl] = useState('http://localhost:18789');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -91,22 +83,24 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
+    const settings = getStoredSettings();
     
     if (testMode === 'basic') {
-      const result = await testBasicConnection(url);
+      const result = await testBasicConnection(url, settings.useProxy);
       setTesting(false);
       setTestResult({
         success: result.success,
         message: result.success 
-          ? '✅ WebSocket reachable' 
+          ? '✅ Gateway reachable' 
           : `❌ ${result.error}`,
         details: result.success 
-          ? 'Gateway accepts connections. Try "Full Test" to verify auth.' 
-          : 'Gateway is not accepting WebSocket connections.'
+          ? 'Gateway responds to HTTP. Try "Full Test" to verify auth.' 
+          : 'Gateway is not accepting HTTP connections.'
       });
     } else {
       // Full test with auth
-      const result = await testFullConnection(url, password);
+      const settings = getStoredSettings();
+      const result = await testFullConnection(url, password, settings.useProxy);
       setTesting(false);
       setTestResult({
         success: result.success,
@@ -346,7 +340,7 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
       {/* Help Text */}
       <div className="space-y-1.5 pt-2 border-t border-border">
         <p className="text-[10px] font-mono text-muted-foreground">
-          Default: ws://localhost:18789
+          Default: http://localhost:18789
         </p>
         <div className="text-[10px] text-muted-foreground space-y-0.5">
           <p>• If Basic passes but Full fails → Check password</p>
