@@ -8,6 +8,23 @@ import {
 } from '@/lib/file-store';
 import { PathValidationError, isValidUUID } from '@/lib/security';
 
+// CORS headers for all responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+/**
+ * Handle OPTIONS requests for CORS preflight
+ */
+export async function OPTIONS(): Promise<NextResponse> {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
 /**
  * GET /api/tasks/[id]
  * Get a single task by ID
@@ -26,13 +43,27 @@ export async function GET(
           error: 'Invalid task ID format - must be UUID',
           code: 'INVALID_UUID'
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
-    const task = await getTask(id);
+    // Get task with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    const taskPromise = getTask(id);
     
-    return NextResponse.json({ task });
+    let task;
+    try {
+      task = await Promise.race([taskPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      return NextResponse.json(
+        { error: 'Request timeout', code: 'TIMEOUT' },
+        { status: 504, headers: corsHeaders }
+      );
+    }
+    
+    return NextResponse.json({ task }, { headers: corsHeaders });
     
   } catch (error) {
     console.error(`GET /api/tasks/[id] error:`, error);
@@ -40,20 +71,20 @@ export async function GET(
     if (error instanceof PathValidationError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
     
     if (error instanceof FileStoreError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: error.statusCode }
+        { status: error.statusCode, headers: corsHeaders }
       );
     }
     
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -87,7 +118,7 @@ export async function PATCH(
           error: 'Invalid task ID format - must be UUID',
           code: 'INVALID_UUID'
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -98,7 +129,7 @@ export async function PATCH(
     } catch {
       return NextResponse.json(
         { error: 'Invalid JSON body', code: 'INVALID_JSON' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -116,16 +147,29 @@ export async function PATCH(
           code: 'VALIDATION_ERROR',
           details: errors 
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
     const updates = validationResult.data;
     
-    // Update the task
-    const task = await updateTask(id, updates);
+    // Update the task with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    const taskPromise = updateTask(id, updates);
     
-    return NextResponse.json({ task });
+    let task;
+    try {
+      task = await Promise.race([taskPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      return NextResponse.json(
+        { error: 'Request timeout', code: 'TIMEOUT' },
+        { status: 504, headers: corsHeaders }
+      );
+    }
+    
+    return NextResponse.json({ task }, { headers: corsHeaders });
     
   } catch (error) {
     console.error(`PATCH /api/tasks/[id] error:`, error);
@@ -133,20 +177,20 @@ export async function PATCH(
     if (error instanceof PathValidationError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
     
     if (error instanceof FileStoreError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: error.statusCode }
+        { status: error.statusCode, headers: corsHeaders }
       );
     }
     
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -169,18 +213,31 @@ export async function DELETE(
           error: 'Invalid task ID format - must be UUID',
           code: 'INVALID_UUID'
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
-    await deleteTask(id);
+    // Delete task with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    const deletePromise = deleteTask(id);
+    
+    try {
+      await Promise.race([deletePromise, timeoutPromise]);
+    } catch (timeoutError) {
+      return NextResponse.json(
+        { error: 'Request timeout', code: 'TIMEOUT' },
+        { status: 504, headers: corsHeaders }
+      );
+    }
     
     return NextResponse.json(
       { 
         success: true,
         message: 'Task deleted successfully'
       },
-      { status: 200 }
+      { status: 200, headers: corsHeaders }
     );
     
   } catch (error) {
@@ -189,20 +246,20 @@ export async function DELETE(
     if (error instanceof PathValidationError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
     
     if (error instanceof FileStoreError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: error.statusCode }
+        { status: error.statusCode, headers: corsHeaders }
       );
     }
     
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

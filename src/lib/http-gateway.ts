@@ -48,11 +48,15 @@ export async function testFullConnection(
   error?: string;
   details?: string;
 }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+  
   try {
     // Use proxy path if needed to avoid CORS
     const fetchUrl = useProxy ? '/api/gateway/v1/responses' : `${url}/v1/responses`;
     const response = await fetch(fetchUrl, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Authorization': `Bearer ${password}`,
         'Content-Type': 'application/json',
@@ -64,6 +68,8 @@ export async function testFullConnection(
         stream: false,
       }),
     });
+
+    clearTimeout(timeoutId);
 
     if (response.status === 401) {
       return {
@@ -99,6 +105,7 @@ export async function testFullConnection(
       details: JSON.stringify(data).slice(0, 200),
     };
   } catch (err) {
+    clearTimeout(timeoutId);
     return {
       success: false,
       stage: 'connect',
@@ -110,22 +117,32 @@ export async function testFullConnection(
 
 // HTTP-based hook for chat
 export function useGatewayHTTP() {
-  const setConnected = useChatStore(useCallback((state) => state.setConnected, []));
-  const addMessage = useChatStore(useCallback((state) => state.addMessage, []));
-  const appendToCurrentMessage = useChatStore(useCallback((state) => state.appendToCurrentMessage, []));
-  const finalizeCurrentMessage = useChatStore(useCallback((state) => state.finalizeCurrentMessage, []));
-  const setLoading = useChatStore(useCallback((state) => state.setLoading, []));
-  const setError = useChatStore(useCallback((state) => state.setError, []));
-  const clearError = useChatStore(useCallback((state) => state.clearError, []));
+  // Use single selector to get all chat store actions at once
+  const chatStore = useChatStore(useCallback((state) => ({
+    setConnected: state.setConnected,
+    addMessage: state.addMessage,
+    appendToCurrentMessage: state.appendToCurrentMessage,
+    finalizeCurrentMessage: state.finalizeCurrentMessage,
+    setLoading: state.setLoading,
+    setError: state.setError,
+    clearError: state.clearError,
+    startStreamingMessage: state.startStreamingMessage,
+    isLoading: state.isLoading,
+    error: state.error,
+  }), []));
   
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  
   const abortRef = useRef<AbortController | null>(null);
   const configRef = useRef(getGatewayConfig());
+  const isSendingRef = useRef(false); // Prevent race conditions
+  const mountedRef = useRef(true);
 
   // Test connection on mount - only once
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
     
     const test = async () => {
       // Skip if already connected or tested
@@ -133,42 +150,62 @@ export function useGatewayHTTP() {
       
       setConnectionState('connecting');
       const config = getGatewayConfig();
+      configRef.current = config; // Update ref
+      
       const result = await testFullConnection(config.url, config.password, config.useProxy);
       
-      if (!mounted) return;
+      if (!mountedRef.current) return;
       
       if (result.success) {
         setConnectionState('connected');
-        setConnected(true);
+        chatStore.setConnected(true);
       } else {
         setConnectionState('error');
         setConnectionError(result.error || 'Unknown error');
-        setConnected(false);
+        chatStore.setConnected(false);
       }
     };
     
     test();
     
     return () => {
-      mounted = false;
+      mountedRef.current = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run once on mount
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+    };
+  }, []);
+
   const sendMessage = useCallback(async (text: string) => {
+    // Prevent race conditions
+    if (isSendingRef.current) {
+      console.warn('Already sending a message, please wait');
+      return;
+    }
+    
+    isSendingRef.current = true;
+    
     // Add user message
-    addMessage({
+    chatStore.addMessage({
       id: `user-${Date.now()}`,
       role: 'user',
       content: text,
       createdAt: new Date(),
     });
 
-    setLoading(true);
-    clearError();
+    chatStore.setLoading(true);
+    chatStore.clearError();
     setConnectionError(null);
 
-    // Cancel any in-flight request
+    // Cancel any in-flight request (shouldn't happen due to isSendingRef)
     if (abortRef.current) {
       abortRef.current.abort();
     }
@@ -176,6 +213,8 @@ export function useGatewayHTTP() {
 
     try {
       const config = getGatewayConfig();
+      configRef.current = config;
+      
       // Use proxy URL to avoid CORS issues
       const fetchUrl = config.useProxy ? '/api/gateway/v1/responses' : `${config.url}/v1/responses`;
       
@@ -197,7 +236,8 @@ export function useGatewayHTTP() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       if (!response.body) {
@@ -208,9 +248,10 @@ export function useGatewayHTTP() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let hasReceivedContent = false;
 
       // Start streaming message
-      useChatStore.getState().startStreamingMessage();
+      chatStore.startStreamingMessage();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -218,21 +259,53 @@ export function useGatewayHTTP() {
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+          const trimmedLine = line.trim();
+          
+          // Skip empty lines and comments
+          if (!trimmedLine || trimmedLine.startsWith(':')) continue;
+          
+          if (trimmedLine.startsWith('data: ')) {
+            const data = trimmedLine.slice(6);
             if (data === '[DONE]') continue;
             
             try {
               const parsed = JSON.parse(data);
-              // Extract text from OpenResponses format
-              const text = parsed.output?.[0]?.content?.[0]?.text || 
-                          parsed.delta?.content?.[0]?.text ||
-                          parsed.content || '';
-              if (text) {
-                appendToCurrentMessage(text);
+              
+              // Extract text from OpenResponses format (multiple possible formats)
+              let textContent = '';
+              
+              // Format 1: output[0].content[0].text
+              if (parsed.output?.[0]?.content?.[0]?.text) {
+                textContent = parsed.output[0].content[0].text;
+              }
+              // Format 2: delta.content[0].text (streaming)
+              else if (parsed.delta?.content?.[0]?.text) {
+                textContent = parsed.delta.content[0].text;
+              }
+              // Format 3: direct content
+              else if (typeof parsed.content === 'string') {
+                textContent = parsed.content;
+              }
+              // Format 4: choices[0].delta.content (OpenAI format)
+              else if (parsed.choices?.[0]?.delta?.content) {
+                textContent = parsed.choices[0].delta.content;
+              }
+              
+              if (textContent) {
+                hasReceivedContent = true;
+                chatStore.appendToCurrentMessage(textContent);
+              }
+              
+              // Check for completion status
+              if (parsed.status === 'completed' && !hasReceivedContent) {
+                // Handle case where response is in output but not streamed
+                const finalOutput = parsed.output?.[0]?.content?.[0]?.text;
+                if (finalOutput) {
+                  chatStore.appendToCurrentMessage(finalOutput);
+                }
               }
             } catch {
               // Ignore parse errors for incomplete chunks
@@ -241,53 +314,104 @@ export function useGatewayHTTP() {
         }
       }
 
-      finalizeCurrentMessage();
+      // Process any remaining buffer content
+      if (buffer.trim()) {
+        const trimmedLine = buffer.trim();
+        if (trimmedLine.startsWith('data: ')) {
+          const data = trimmedLine.slice(6);
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data);
+              const textContent = parsed.output?.[0]?.content?.[0]?.text || 
+                                parsed.delta?.content?.[0]?.text || '';
+              if (textContent) {
+                chatStore.appendToCurrentMessage(textContent);
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      chatStore.finalizeCurrentMessage();
+      setConnectionState('connected');
+      
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        return; // User cancelled
+        // User cancelled - finalize any partial message
+        chatStore.finalizeCurrentMessage();
+        return; 
       }
+      
       const errorMsg = err instanceof Error ? err.message : 'Request failed';
-      setError(errorMsg);
+      chatStore.setError(errorMsg);
       setConnectionError(errorMsg);
-      finalizeCurrentMessage();
+      setConnectionState('error');
+      chatStore.finalizeCurrentMessage();
+      
+      // Auto-retry logic for certain errors
+      if (reconnectAttempt < 3 && errorMsg.includes('fetch')) {
+        setReconnectAttempt(prev => prev + 1);
+        setTimeout(() => {
+          if (mountedRef.current) {
+            reconnect();
+          }
+        }, 1000 * Math.pow(2, reconnectAttempt)); // Exponential backoff
+      }
+    } finally {
+      isSendingRef.current = false;
+      abortRef.current = null;
     }
-  }, [addMessage, setLoading, clearError, appendToCurrentMessage, finalizeCurrentMessage, setError]);
+  }, [chatStore, reconnectAttempt]);
 
   const reconnect = useCallback(async () => {
+    if (connectionState === 'connecting') return; // Prevent concurrent reconnects
+    
     setConnectionState('connecting');
     setConnectionError(null);
     const config = getGatewayConfig();
+    configRef.current = config;
+    
     const result = await testFullConnection(config.url, config.password, config.useProxy);
+    
+    if (!mountedRef.current) return;
+    
     if (result.success) {
       setConnectionState('connected');
-      setConnected(true);
+      setReconnectAttempt(0);
+      chatStore.setConnected(true);
     } else {
       setConnectionState('error');
       setConnectionError(result.error || 'Unknown error');
-      setConnected(false);
+      chatStore.setConnected(false);
     }
-  }, [setConnected]);
+  }, [chatStore, connectionState]);
 
   const setPassword = useCallback((password: string) => {
-    localStorage.setItem('clawbrain_gateway_password', password);
-    configRef.current.password = password;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('clawbrain_gateway_password', password);
+      configRef.current.password = password;
+    }
   }, []);
 
   const disconnect = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
+      abortRef.current = null;
     }
+    isSendingRef.current = false;
     setConnectionState('idle');
-    setConnected(false);
-  }, [setConnected]);
+    chatStore.setConnected(false);
+  }, [chatStore]);
 
   return {
     isConnected: connectionState === 'connected',
     connectionState,
     connectionError,
-    reconnectAttempt: 0,
-    isLoading: useChatStore(useCallback((state) => state.isLoading, [])),
-    error: useChatStore(useCallback((state) => state.error, [])),
+    reconnectAttempt,
+    isLoading: chatStore.isLoading,
+    error: chatStore.error,
     sendMessage,
     reconnect,
     disconnect,

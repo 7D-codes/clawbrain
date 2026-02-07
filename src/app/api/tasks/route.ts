@@ -8,6 +8,23 @@ import {
 } from '@/lib/file-store';
 import { PathValidationError } from '@/lib/security';
 
+// CORS headers for all responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+/**
+ * Handle OPTIONS requests for CORS preflight
+ */
+export async function OPTIONS(): Promise<NextResponse> {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
+
 /**
  * GET /api/tasks
  * List all tasks with optional pagination
@@ -26,8 +43,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const statusFilter = searchParams.get('status');
     const projectFilter = searchParams.get('project');
     
-    // Get all tasks
-    let tasks = await listTasks();
+    // Get all tasks with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    const tasksPromise = listTasks();
+    
+    let tasks: Task[];
+    try {
+      tasks = await Promise.race([tasksPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      return NextResponse.json(
+        { error: 'Request timeout', code: 'TIMEOUT' },
+        { status: 504, headers: corsHeaders }
+      );
+    }
     
     // Apply filters
     if (statusFilter) {
@@ -39,7 +69,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             code: 'INVALID_STATUS',
             validValues: validStatuses
           },
-          { status: 400 }
+          { status: 400, headers: corsHeaders }
         );
       }
       tasks = tasks.filter(task => task.status === statusFilter);
@@ -66,7 +96,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       }
-    });
+    }, { headers: corsHeaders });
     
   } catch (error) {
     console.error('GET /api/tasks error:', error);
@@ -74,20 +104,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (error instanceof PathValidationError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
     
     if (error instanceof FileStoreError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: error.statusCode }
+        { status: error.statusCode, headers: corsHeaders }
       );
     }
     
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
@@ -114,7 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } catch {
       return NextResponse.json(
         { error: 'Invalid JSON body', code: 'INVALID_JSON' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -132,7 +162,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'VALIDATION_ERROR',
           details: errors 
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -144,8 +174,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
     
-    // Create the task
-    const task = await createTask({
+    // Create the task with timeout
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    
+    const taskPromise = createTask({
       title: data.title,
       slug,
       status: data.status,
@@ -153,11 +187,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       content: data.content
     });
     
+    let task: Task;
+    try {
+      task = await Promise.race([taskPromise, timeoutPromise]);
+    } catch (timeoutError) {
+      return NextResponse.json(
+        { error: 'Request timeout', code: 'TIMEOUT' },
+        { status: 504, headers: corsHeaders }
+      );
+    }
+    
     return NextResponse.json(
       { task },
       { 
         status: 201,
         headers: {
+          ...corsHeaders,
           'Location': `/api/tasks/${task.id}`
         }
       }
@@ -169,20 +214,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof PathValidationError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: 403 }
+        { status: 403, headers: corsHeaders }
       );
     }
     
     if (error instanceof FileStoreError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
-        { status: error.statusCode }
+        { status: error.statusCode, headers: corsHeaders }
       );
     }
     
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }

@@ -2,14 +2,17 @@
  * Chat Store - Zustand
  * 
  * Manages chat state including:
- * - Message history
+ * - Message history (persisted)
  * - Connection status
  * - Loading states
  * - Streaming message handling
  */
 
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
+
+// Maximum messages to keep in history (to prevent memory bloat)
+const MAX_MESSAGES = 100;
 
 // Message types
 export type MessageRole = 'user' | 'assistant' | 'system';
@@ -22,10 +25,13 @@ export interface Message {
   isStreaming?: boolean;
 }
 
-// Chat state interface
-interface ChatState {
-  // Messages
+// Persisted state interface
+interface PersistedChatState {
   messages: Message[];
+}
+
+// Chat state interface
+interface ChatState extends PersistedChatState {
   currentStreamingMessage: Message | null;
 
   // Connection state
@@ -57,145 +63,166 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Create the store
+// Create the store with persistence
 export const useChatStore = create<ChatState>()(
   devtools(
-    (set, get) => ({
-      // Initial state
-      messages: [],
-      currentStreamingMessage: null,
-      isConnected: false,
-      isLoading: false,
-      error: null,
+    persist(
+      (set, get) => ({
+        // Initial state
+        messages: [],
+        currentStreamingMessage: null,
+        isConnected: false,
+        isLoading: false,
+        error: null,
 
-      // Connection actions
-      setConnected: (connected) => {
-        set({ isConnected: connected }, false, 'setConnected');
-      },
+        // Connection actions
+        setConnected: (connected) => {
+          set({ isConnected: connected }, false, 'setConnected');
+        },
 
-      setLoading: (loading) => {
-        set({ isLoading: loading }, false, 'setLoading');
-      },
+        setLoading: (loading) => {
+          set({ isLoading: loading }, false, 'setLoading');
+        },
 
-      setError: (error) => {
-        set({ error, isLoading: false }, false, 'setError');
-      },
+        setError: (error) => {
+          set({ error, isLoading: false }, false, 'setError');
+        },
 
-      clearError: () => {
-        set({ error: null }, false, 'clearError');
-      },
+        clearError: () => {
+          set({ error: null }, false, 'clearError');
+        },
 
-      // Message actions
-      addMessage: (message) => {
-        set(
-          (state) => ({
-            messages: [...state.messages, message],
-          }),
-          false,
-          'addMessage'
-        );
-      },
+        // Message actions
+        addMessage: (message) => {
+          set(
+            (state) => {
+              // Add new message and trim to max if needed
+              const newMessages = [...state.messages, message];
+              if (newMessages.length > MAX_MESSAGES) {
+                // Keep first system message if exists, then trim from the beginning
+                const systemMessages = newMessages.filter(m => m.role === 'system');
+                const otherMessages = newMessages.filter(m => m.role !== 'system');
+                const trimmedOthers = otherMessages.slice(-(MAX_MESSAGES - systemMessages.length));
+                return { messages: [...systemMessages, ...trimmedOthers] };
+              }
+              return { messages: newMessages };
+            },
+            false,
+            'addMessage'
+          );
+        },
 
-      updateMessage: (id, updates) => {
-        set(
-          (state) => ({
-            messages: state.messages.map((msg) =>
-              msg.id === id ? { ...msg, ...updates } : msg
-            ),
-          }),
-          false,
-          'updateMessage'
-        );
-      },
+        updateMessage: (id, updates) => {
+          set(
+            (state) => ({
+              messages: state.messages.map((msg) =>
+                msg.id === id ? { ...msg, ...updates } : msg
+              ),
+            }),
+            false,
+            'updateMessage'
+          );
+        },
 
-      deleteMessage: (id) => {
-        set(
-          (state) => ({
-            messages: state.messages.filter((msg) => msg.id !== id),
-          }),
-          false,
-          'deleteMessage'
-        );
-      },
+        deleteMessage: (id) => {
+          set(
+            (state) => ({
+              messages: state.messages.filter((msg) => msg.id !== id),
+            }),
+            false,
+            'deleteMessage'
+          );
+        },
 
-      clearMessages: () => {
-        set(
-          { messages: [], currentStreamingMessage: null },
-          false,
-          'clearMessages'
-        );
-      },
+        clearMessages: () => {
+          set(
+            { messages: [], currentStreamingMessage: null },
+            false,
+            'clearMessages'
+          );
+        },
 
-      // Streaming actions
-      startStreamingMessage: () => {
-        const newMessage: Message = {
-          id: generateId(),
-          role: 'assistant',
-          content: '',
-          createdAt: new Date(),
-          isStreaming: true,
-        };
-        set(
-          { currentStreamingMessage: newMessage },
-          false,
-          'startStreamingMessage'
-        );
-      },
+        // Streaming actions
+        startStreamingMessage: () => {
+          const newMessage: Message = {
+            id: generateId(),
+            role: 'assistant',
+            content: '',
+            createdAt: new Date(),
+            isStreaming: true,
+          };
+          set(
+            { currentStreamingMessage: newMessage },
+            false,
+            'startStreamingMessage'
+          );
+        },
 
-      appendToCurrentMessage: (content) => {
-        const state = get();
+        appendToCurrentMessage: (content) => {
+          const state = get();
 
-        // If we don't have a streaming message yet, start one
-        if (!state.currentStreamingMessage) {
-          get().startStreamingMessage();
-        }
+          // If we don't have a streaming message yet, start one
+          if (!state.currentStreamingMessage) {
+            get().startStreamingMessage();
+          }
 
-        set(
-          (state) => {
-            if (!state.currentStreamingMessage) return state;
-            return {
-              currentStreamingMessage: {
-                ...state.currentStreamingMessage,
-                content: state.currentStreamingMessage.content + content,
-              },
-            };
-          },
-          false,
-          'appendToCurrentMessage'
-        );
-      },
+          set(
+            (state) => {
+              if (!state.currentStreamingMessage) return state;
+              return {
+                currentStreamingMessage: {
+                  ...state.currentStreamingMessage,
+                  content: state.currentStreamingMessage.content + content,
+                },
+              };
+            },
+            false,
+            'appendToCurrentMessage'
+          );
+        },
 
-      finalizeCurrentMessage: () => {
-        const state = get();
-        if (!state.currentStreamingMessage) {
-          set({ isLoading: false }, false, 'finalizeCurrentMessage');
-          return;
-        }
+        finalizeCurrentMessage: () => {
+          const state = get();
+          if (!state.currentStreamingMessage) {
+            set({ isLoading: false }, false, 'finalizeCurrentMessage');
+            return;
+          }
 
-        const finalizedMessage: Message = {
-          ...state.currentStreamingMessage,
-          isStreaming: false,
-        };
+          const finalizedMessage: Message = {
+            ...state.currentStreamingMessage,
+            isStreaming: false,
+          };
 
-        set(
-          {
-            messages: [...state.messages, finalizedMessage],
-            currentStreamingMessage: null,
-            isLoading: false,
-          },
-          false,
-          'finalizeCurrentMessage'
-        );
-      },
+          // Add to messages and trim if needed
+          const newMessages = [...state.messages, finalizedMessage];
+          const trimmedMessages = newMessages.length > MAX_MESSAGES
+            ? newMessages.slice(-MAX_MESSAGES)
+            : newMessages;
 
-      cancelStreaming: () => {
-        set(
-          { currentStreamingMessage: null, isLoading: false },
-          false,
-          'cancelStreaming'
-        );
-      },
-    }),
+          set(
+            {
+              messages: trimmedMessages,
+              currentStreamingMessage: null,
+              isLoading: false,
+            },
+            false,
+            'finalizeCurrentMessage'
+          );
+        },
+
+        cancelStreaming: () => {
+          set(
+            { currentStreamingMessage: null, isLoading: false },
+            false,
+            'cancelStreaming'
+          );
+        },
+      }),
+      {
+        name: 'clawbrain-chat',
+        partialize: (state) => ({ messages: state.messages }),
+      }
+    ),
     { name: 'chat-store' }
   )
 );
@@ -231,5 +258,3 @@ export const selectLastMessage = (state: ChatState): Message | null => {
   const allMessages = selectAllMessages(state);
   return allMessages[allMessages.length - 1] || null;
 };
-
-

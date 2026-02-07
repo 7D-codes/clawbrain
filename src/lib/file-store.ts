@@ -15,7 +15,55 @@ import {
  * - All writes are atomic (temp file → rename)
  * - Conflict detection via timestamps
  * - Sandboxed to ~/clawdbrain/
+ * - Retry logic for transient errors
  */
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 100; // Start with 100ms, exponential backoff
+
+/**
+ * Retry wrapper for async operations
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries = MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | undefined;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Don't retry on certain errors
+      if (error instanceof FileStoreError) {
+        if (error.statusCode === 404 || error.statusCode === 403) {
+          throw error;
+        }
+      }
+      
+      if (error instanceof PathValidationError) {
+        throw error;
+      }
+      
+      // Last attempt - throw error
+      if (attempt === maxRetries) {
+        break;
+      }
+      
+      // Wait before retry with exponential backoff + jitter
+      const jitter = Math.random() * 100;
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
+      console.warn(`${operationName} failed (attempt ${attempt + 1}), retrying in ${delay}ms:`, lastError.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
 
 // Task interface
 export interface Task {
@@ -59,16 +107,10 @@ export class FileStoreError extends Error {
  * Ensures the tasks directory exists
  */
 export async function ensureTasksDirectory(): Promise<void> {
-  try {
+  return withRetry(async () => {
     const tasksDir = getTasksDirectory();
     await fs.mkdir(tasksDir, { recursive: true });
-  } catch (error) {
-    throw new FileStoreError(
-      `Failed to create tasks directory: ${(error as Error).message}`,
-      'DIRECTORY_CREATE_FAILED',
-      500
-    );
-  }
+  }, 'ensureTasksDirectory');
 }
 
 /**
@@ -150,7 +192,7 @@ function serializeTask(task: Task): string {
  * Lists all tasks in the tasks directory
  */
 export async function listTasks(): Promise<Task[]> {
-  try {
+  return withRetry(async () => {
     await ensureTasksDirectory();
     const tasksDir = getTasksDirectory();
     
@@ -186,7 +228,7 @@ export async function listTasks(): Promise<Task[]> {
     tasks.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
     
     return tasks;
-  } catch (error) {
+  }, 'listTasks').catch(error => {
     if (error instanceof FileStoreError || error instanceof PathValidationError) {
       throw error;
     }
@@ -195,7 +237,7 @@ export async function listTasks(): Promise<Task[]> {
       'LIST_TASKS_FAILED',
       500
     );
-  }
+  });
 }
 
 /**
