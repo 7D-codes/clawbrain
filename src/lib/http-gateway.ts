@@ -117,19 +117,17 @@ export async function testFullConnection(
 
 // HTTP-based hook for chat
 export function useGatewayHTTP() {
-  // Use single selector to get all chat store actions at once
-  const chatStore = useChatStore(useCallback((state) => ({
-    setConnected: state.setConnected,
-    addMessage: state.addMessage,
-    appendToCurrentMessage: state.appendToCurrentMessage,
-    finalizeCurrentMessage: state.finalizeCurrentMessage,
-    setLoading: state.setLoading,
-    setError: state.setError,
-    clearError: state.clearError,
-    startStreamingMessage: state.startStreamingMessage,
-    isLoading: state.isLoading,
-    error: state.error,
-  }), []));
+  // Use individual selectors to avoid object creation and infinite loops
+  const setConnected = useChatStore(useCallback((state) => state.setConnected, []));
+  const addMessage = useChatStore(useCallback((state) => state.addMessage, []));
+  const appendToCurrentMessage = useChatStore(useCallback((state) => state.appendToCurrentMessage, []));
+  const finalizeCurrentMessage = useChatStore(useCallback((state) => state.finalizeCurrentMessage, []));
+  const startStreamingMessage = useChatStore(useCallback((state) => state.startStreamingMessage, []));
+  const setLoading = useChatStore(useCallback((state) => state.setLoading, []));
+  const setError = useChatStore(useCallback((state) => state.setError, []));
+  const clearError = useChatStore(useCallback((state) => state.clearError, []));
+  const isLoading = useChatStore(useCallback((state) => state.isLoading, []));
+  const error = useChatStore(useCallback((state) => state.error, []));
   
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -158,11 +156,11 @@ export function useGatewayHTTP() {
       
       if (result.success) {
         setConnectionState('connected');
-        chatStore.setConnected(true);
+        setConnected(true);
       } else {
         setConnectionState('error');
         setConnectionError(result.error || 'Unknown error');
-        chatStore.setConnected(false);
+        setConnected(false);
       }
     };
     
@@ -194,15 +192,15 @@ export function useGatewayHTTP() {
     isSendingRef.current = true;
     
     // Add user message
-    chatStore.addMessage({
+    addMessage({
       id: `user-${Date.now()}`,
       role: 'user',
       content: text,
       createdAt: new Date(),
     });
 
-    chatStore.setLoading(true);
-    chatStore.clearError();
+    setLoading(true);
+    clearError();
     setConnectionError(null);
 
     // Cancel any in-flight request (shouldn't happen due to isSendingRef)
@@ -251,7 +249,7 @@ export function useGatewayHTTP() {
       let hasReceivedContent = false;
 
       // Start streaming message
-      chatStore.startStreamingMessage();
+      startStreamingMessage();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -296,7 +294,7 @@ export function useGatewayHTTP() {
               
               if (textContent) {
                 hasReceivedContent = true;
-                chatStore.appendToCurrentMessage(textContent);
+                appendToCurrentMessage(textContent);
               }
               
               // Check for completion status
@@ -304,7 +302,7 @@ export function useGatewayHTTP() {
                 // Handle case where response is in output but not streamed
                 const finalOutput = parsed.output?.[0]?.content?.[0]?.text;
                 if (finalOutput) {
-                  chatStore.appendToCurrentMessage(finalOutput);
+                  appendToCurrentMessage(finalOutput);
                 }
               }
             } catch {
@@ -325,7 +323,7 @@ export function useGatewayHTTP() {
               const textContent = parsed.output?.[0]?.content?.[0]?.text || 
                                 parsed.delta?.content?.[0]?.text || '';
               if (textContent) {
-                chatStore.appendToCurrentMessage(textContent);
+                appendToCurrentMessage(textContent);
               }
             } catch {
               // Ignore parse errors
@@ -334,21 +332,21 @@ export function useGatewayHTTP() {
         }
       }
 
-      chatStore.finalizeCurrentMessage();
+      finalizeCurrentMessage();
       setConnectionState('connected');
       
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         // User cancelled - finalize any partial message
-        chatStore.finalizeCurrentMessage();
+        finalizeCurrentMessage();
         return; 
       }
       
       const errorMsg = err instanceof Error ? err.message : 'Request failed';
-      chatStore.setError(errorMsg);
+      setError(errorMsg);
       setConnectionError(errorMsg);
       setConnectionState('error');
-      chatStore.finalizeCurrentMessage();
+      finalizeCurrentMessage();
       
       // Auto-retry logic for certain errors
       if (reconnectAttempt < 3 && errorMsg.includes('fetch')) {
@@ -363,7 +361,7 @@ export function useGatewayHTTP() {
       isSendingRef.current = false;
       abortRef.current = null;
     }
-  }, [chatStore, reconnectAttempt]);
+  }, [addMessage, appendToCurrentMessage, clearError, finalizeCurrentMessage, reconnectAttempt, setConnected, setError, setLoading, startStreamingMessage]);
 
   const reconnect = useCallback(async () => {
     if (connectionState === 'connecting') return; // Prevent concurrent reconnects
@@ -380,13 +378,13 @@ export function useGatewayHTTP() {
     if (result.success) {
       setConnectionState('connected');
       setReconnectAttempt(0);
-      chatStore.setConnected(true);
+      setConnected(true);
     } else {
       setConnectionState('error');
       setConnectionError(result.error || 'Unknown error');
-      chatStore.setConnected(false);
+      setConnected(false);
     }
-  }, [chatStore, connectionState]);
+  }, [setConnected, connectionState]);
 
   const setPassword = useCallback((password: string) => {
     if (typeof window !== 'undefined') {
@@ -402,16 +400,16 @@ export function useGatewayHTTP() {
     }
     isSendingRef.current = false;
     setConnectionState('idle');
-    chatStore.setConnected(false);
-  }, [chatStore]);
+    setConnected(false);
+  }, [setConnected]);
 
   return {
     isConnected: connectionState === 'connected',
     connectionState,
     connectionError,
     reconnectAttempt,
-    isLoading: chatStore.isLoading,
-    error: chatStore.error,
+    isLoading,
+    error,
     sendMessage,
     reconnect,
     disconnect,
