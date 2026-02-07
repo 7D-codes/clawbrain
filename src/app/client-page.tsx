@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { ChatPanel } from "@/components/chat/ChatPanel";
 import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import type { OnboardingResult } from "@/lib/onboarding";
@@ -69,11 +68,16 @@ export default function ClientPage({ onboardingResult }: ClientPageProps) {
           <div 
             className="fixed inset-0 bg-black/50 z-40"
             onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
           />
         )}
 
         {/* Main content - Kanban Board */}
-        <main className="flex-1 overflow-hidden bg-background">
+        <main 
+          className="flex-1 overflow-hidden bg-background"
+          role="main"
+          aria-label="Task board"
+        >
           <ErrorBoundary 
             fallback={
               <div className="flex h-full items-center justify-center p-8">

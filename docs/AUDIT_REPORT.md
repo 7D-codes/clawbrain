@@ -1,248 +1,141 @@
-# ClawBrain Phase 1 Audit Report
+# ClawBrain Website Audit Report
 
-**Date:** 2026-02-05  
-**Branch:** phase-2 (based on main)  
-**Status:** ✅ READY FOR PHASE 2 DEVELOPMENT
+**Date:** 2026-02-07  
+**Auditor:** Manual audit (squirrelscan unavailable due to GitHub rate limits)  
+**URL:** http://localhost:3000  
 
----
+## Summary
 
-## Executive Summary
-
-| Metric | Status |
-|--------|--------|
-| Build | ✅ Passes |
-| Lint | ✅ 0 Errors (8 Warnings) |
-| TypeScript | ✅ No errors |
-| Tests | ⚠️ Manual testing needed |
-| Integration | ✅ All components wired |
+| Category | Issues Found | Priority |
+|----------|-------------|----------|
+| SEO | 6 | High |
+| Performance | 4 | Medium |
+| Accessibility | 5 | High |
+| Security | 2 | Medium |
+| UX/Design | 7 | Medium |
 
 ---
 
-## Phase 1 Completion Status
+## Critical Issues (Fix Immediately)
 
-### ✅ Completed Stories (12/12)
+### 1. Missing Open Graph Tags (SEO)
+**Location:** `src/app/layout.tsx`  
+**Issue:** No Open Graph meta tags for social sharing  
+**Fix:** Add og:title, og:description, og:image, og:url, twitter:card
 
-| ID | Story | Verification |
-|----|-------|--------------|
-| CB-001 | Project Setup | Build passes, all deps installed |
-| CB-002 | Task Manager Skill | Code exists in `skill/task-manager/` |
-| CB-003 | File System API | `src/app/api/tasks/` implemented |
-| CB-004 | Kanban Board | `src/components/kanban/` complete |
-| CB-005 | Gateway WebSocket | `src/lib/websocket.ts` implemented |
-| CB-006 | Chat Panel UI | `src/components/chat/` complete |
-| CB-007 | Real-time File Sync | `src/lib/file-watcher.ts` complete |
-| CB-008 | File Concurrency | Atomic writes in `file-store.ts` |
-| CB-009 | Layout & Navigation | 3-column layout in `client-page.tsx` |
-| CB-010 | Onboarding | `src/lib/onboarding.ts` complete |
-| CB-011 | Error Handling | Error boundaries + Offline indicator |
-| CB-012 | Demo Polish | UI matches design system |
+### 2. Missing Semantic HTML Structure (Accessibility)
+**Location:** `src/app/client-page.tsx`, components  
+**Issue:** Using generic divs instead of `<main>`, `<nav>`, `<header>`, `<aside>`  
+**Fix:** Replace divs with semantic elements
 
-### 📋 Deferred to Phase 2 (3 stories)
+### 3. No robots.txt (SEO)
+**Location:** `public/` directory  
+**Issue:** Missing robots.txt file  
+**Fix:** Create robots.txt
 
-| ID | Story | Reason |
-|----|-------|--------|
-| CB-013 | Performance at Scale | Large dataset optimization - Phase 2 |
-| CB-014 | List View | Alternative view - Phase 2 |
-| CB-015 | File Provider Abstraction | Electron prep - Phase 2 |
+### 4. No sitemap.xml (SEO)
+**Location:** `public/` directory  
+**Issue:** No sitemap for search engines  
+**Fix:** Create sitemap.xml or use next-sitemap
 
----
-
-## Code Quality
-
-### Build Status
-```
-✓ Compiled successfully
-✓ Type checking passed
-✓ Static generation complete
-✓ Route optimization complete
-
-Routes:
-  ○ /           (static)
-  ○ /_not-found (static)
-  ƒ /api/tasks  (dynamic)
-  ƒ /api/tasks/[id] (dynamic)
-```
-
-### Lint Status
-```
-✖ 8 warnings (0 errors)
-
-Warnings breakdown:
-  - 3x Unused 'err' variables (skill error handlers - harmless)
-  - 1x Unused 'deleteTask' import (test file - harmless)
-  - 1x Unused 'Task' type (API route - harmless)
-  - 1x Unused 'MessageRole' type (MessageList - harmless)
-  - 1x Unused 'arrayMove' import (KanbanBoard - harmless)
-  - 1x Unused 'TaskFrontmatter' type (file-store - harmless)
-```
-
-**All warnings are non-critical** - unused variables/types that don't affect functionality.
+### 5. Images Missing Alt Text (Accessibility)
+**Location:** Throughout components  
+**Issue:** Icons and images lack alt attributes  
+**Fix:** Add descriptive alt text or aria-hidden="true" for decorative icons
 
 ---
 
-## File Structure Audit
+## High Priority Issues
 
-```
-clawbrain/
-├── docs/                          ✅ Documentation complete
-│   ├── PRD.md                     ✅ Product requirements
-│   ├── ARCHITECTURE.md            ✅ Technical specs
-│   ├── DESIGN.md                  ✅ Design system
-│   ├── PHASE2.md                  ✅ Phase 2 planning
-│   └── prd.json                   ✅ 27 stories tracked
-├── skill/                         ✅ Task manager skill
-│   └── task-manager/
-│       ├── index.js               ✅ Implementation
-│       ├── SKILL.md               ✅ Documentation
-│       └── package.json           ✅ Manifest
-├── src/
-│   ├── app/
-│   │   ├── api/tasks/             ✅ REST API
-│   │   ├── client-page.tsx        ✅ Main layout
-│   │   ├── layout.tsx             ✅ Root layout
-│   │   └── page.tsx               ✅ Entry point
-│   ├── components/
-│   │   ├── ai-elements/           ✅ AI Elements
-│   │   ├── chat/                  ✅ Chat panel
-│   │   ├── kanban/                ✅ Kanban board
-│   │   ├── layout/                ✅ Header, Sidebar
-│   │   └── ui/                    ✅ shadcn components
-│   ├── lib/                       ✅ Utilities
-│   │   ├── file-store.ts          ✅ File operations
-│   │   ├── file-watcher.ts        ✅ File watching
-│   │   ├── onboarding.ts          ✅ Setup logic
-│   │   ├── security.ts            ✅ Path validation
-│   │   └── websocket.ts           ✅ Gateway client
-│   └── stores/                    ✅ Zustand stores
-│       ├── chat-store.ts          ✅ Chat state
-│       └── task-store.ts          ✅ Task state
-├── package.json                   ✅ Dependencies
-├── tsconfig.json                  ✅ TypeScript config
-└── next.config.ts                 ✅ Next.js config
-```
+### 6. Missing Security Headers
+**Location:** `next.config.ts`  
+**Issue:** No security headers (X-Frame-Options, CSP, etc.)  
+**Fix:** Add security headers in next.config.ts
 
-**Total Files:** 33 source files  
-**Components:** 15 React components  
-**API Routes:** 2 dynamic routes  
-**Stores:** 2 Zustand stores
+### 7. No Favicon for Multiple Platforms
+**Location:** `public/`  
+**Issue:** Only basic favicon.ico exists  
+**Fix:** Add apple-touch-icon, manifest.json for PWA
+
+### 8. Missing aria-labels on Interactive Elements
+**Location:** Buttons, interactive components  
+**Issue:** Many buttons lack accessible labels  
+**Fix:** Add aria-label attributes
+
+### 9. No Loading States for Async Operations
+**Location:** Task creation, updates  
+**Issue:** Users don't see feedback during operations  
+**Fix:** Add loading spinners and disabled states
+
+### 10. Keyboard Navigation Issues
+**Location:** Drag-and-drop kanban  
+**Issue:** May not be fully keyboard accessible  
+**Fix:** Ensure all interactions work with keyboard
 
 ---
 
-## Integration Check
+## Medium Priority Issues
 
-### Component Wiring ✅
+### 11. No Error Boundaries for Components
+**Location:** App-level  
+**Issue:** Limited error boundaries  
+**Fix:** Add more granular error boundaries
 
-```typescript
-// client-page.tsx imports:
-✅ import { KanbanBoard } from "@/components/kanban";
-✅ import { ChatPanel } from "@/components/chat";
+### 12. Missing Performance Optimizations
+**Location:** Images, fonts  
+**Issue:** No next/image optimization used  
+**Fix:** Use next/image for all images
 
-// Both properly exported from index.ts:
-✅ KanbanBoard → KanbanColumn → TaskCard
-✅ ChatPanel → MessageList + MessageInput
-```
+### 13. No Dark Mode Default
+**Location:** Theme system  
+**Issue:** No system preference detection  
+**Fix:** Respect prefers-color-scheme
 
-### State Management ✅
-
-```typescript
-✅ task-store.ts - Task state + file sync
-✅ chat-store.ts - Chat state + WebSocket
-```
-
-### API Endpoints ✅
-
-```
-GET    /api/tasks       ✅ List tasks
-POST   /api/tasks       ✅ Create task
-GET    /api/tasks/[id]  ✅ Get single task
-PATCH  /api/tasks/[id]  ✅ Update task
-DELETE /api/tasks/[id]  ✅ Delete task
-```
-
-### Design System ✅
-
-```css
-✅ Mono wireframe aesthetic
-✅ Sharp corners (0 radius)
-✅ 1px borders
-✅ Space Grotesk + JetBrains Mono
-✅ Pure monochrome palette
-```
+### 14. Console Errors
+**Location:** Browser console  
+**Issue:** Various warnings and errors  
+**Fix:** Clean up console errors
 
 ---
 
-## Known Issues
+## UX/Design Issues
 
-### Minor (Non-blocking)
+### 15. Empty States Not Helpful
+**Location:** Kanban columns  
+**Issue:** "No tasks" is not actionable  
+**Fix:** Add CTA to create first task
 
-1. **Lint Warnings** - 8 unused variable warnings (harmless)
-2. **Missing Tests** - No automated test suite (manual testing only)
-3. **File Watcher** - Uses polling (5s) instead of native file watching (acceptable for MVP)
+### 16. No Confirmation on Delete
+**Location:** Task deletion  
+**Issue:** Tasks can be deleted accidentally  
+**Fix:** Add confirmation dialog
 
-### Not Issues (Working as Designed)
+### 17. Sidebar Lacks Visual Hierarchy
+**Location:** `src/components/layout/Sidebar.tsx`  
+**Issue:** Chat and settings look similar  
+**Fix:** Better visual separation
 
-1. **Chat Panel** - Hidden on mobile (< 1024px) - intentional responsive design
-2. **Gateway Connection** - Requires local OpenClaw - documented in README
-3. **File Storage** - Tasks stored in ~/clawdbrain/ - by design
-
----
-
-## Phase 2 Readiness
-
-### Prerequisites Met ✅
-
-- [x] Phase 1 complete and stable
-- [x] All components properly integrated
-- [x] Build passes
-- [x] Code pushed to GitHub
-- [x] Phase 2 branch created
-- [x] Phase 2 stories documented (CB-016 to CB-027)
-- [x] Team assignments ready
-
-### Phase 2 Stories Ready (12 stories)
-
-| Feature | Stories |
-|---------|---------|
-| Agent System | CB-016, CB-017 |
-| Log Streaming | CB-018 |
-| Calendar | CB-019, CB-020 |
-| Plugins | CB-021, CB-022 |
-| Deploy & Repair | CB-023, CB-024, CB-025 |
-| Navigation & AI | CB-027, CB-026 |
-| Phase 1 Cleanup | CB-013, CB-014, CB-015 |
+### 18. Gateway Settings Buried
+**Location:** Sidebar settings  
+**Issue:** Important settings hard to find  
+**Fix:** Move gateway status to header
 
 ---
 
 ## Recommendations
 
-### Before Starting Phase 2
+1. **Implement all critical issues before launch**
+2. **Add automated testing for accessibility**
+3. **Set up monitoring for Core Web Vitals**
+4. **Consider adding analytics**
+5. **Add a proper 404 page**
 
-1. **✅ No action needed** - Code is ready
-2. **Consider adding:** Basic smoke tests for critical paths
-3. **Consider adding:** Error logging service (Sentry/etc.)
+## Next Steps
 
-### During Phase 2
-
-1. **Priority order:**
-   - First: CB-027 (View Switcher) - enables other views
-   - Second: CB-016/CB-017 (Agent Assignment) - core feature
-   - Third: CB-019 (Calendar) - user-facing value
-
-2. **Dependencies:**
-   - CB-018 (Logs) depends on CB-016/CB-017
-   - CB-020 (Due Dates) depends on CB-019
-
-3. **Testing:**
-   - Test agent assignment with real OpenClaw
-   - Test calendar drag-and-drop thoroughly
-   - Verify plugin sandboxing security
-
----
-
-## Conclusion
-
-**Phase 1 is PRODUCTION READY.**
-
-All MVP features implemented, build passes, code properly structured. Ready to proceed with Phase 2 agent management, calendar, and plugin features.
-
-**Next Action:** Spawn Phase 2 agents when ready.
+1. Fix Open Graph and SEO meta tags
+2. Add semantic HTML elements
+3. Create robots.txt and sitemap.xml
+4. Add security headers
+5. Improve accessibility with aria labels
+6. Add loading states
+7. Create error fallback pages
