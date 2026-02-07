@@ -244,7 +244,7 @@ export async function listTasks(): Promise<Task[]> {
  * Gets a single task by ID
  */
 export async function getTask(taskId: string): Promise<Task> {
-  try {
+  return withRetry(async () => {
     const filePath = getTaskPath(taskId);
     
     let content: string;
@@ -258,7 +258,7 @@ export async function getTask(taskId: string): Promise<Task> {
     }
     
     return parseTaskFile(content, `task-${taskId}.md`);
-  } catch (error) {
+  }, 'getTask').catch(error => {
     if (error instanceof FileStoreError || error instanceof PathValidationError) {
       throw error;
     }
@@ -267,7 +267,7 @@ export async function getTask(taskId: string): Promise<Task> {
       'GET_TASK_FAILED',
       500
     );
-  }
+  });
 }
 
 /**
@@ -276,20 +276,20 @@ export async function getTask(taskId: string): Promise<Task> {
 export async function createTask(
   data: Omit<Task, 'id' | 'created' | 'updated'>
 ): Promise<Task> {
-  try {
+  const now = new Date().toISOString();
+  const task: Task = {
+    id: uuidv4(),
+    slug: data.slug,
+    title: data.title,
+    status: data.status,
+    project: data.project,
+    created: now,
+    updated: now,
+    content: data.content
+  };
+  
+  return withRetry(async () => {
     await ensureTasksDirectory();
-    
-    const now = new Date().toISOString();
-    const task: Task = {
-      id: uuidv4(),
-      slug: data.slug,
-      title: data.title,
-      status: data.status,
-      project: data.project,
-      created: now,
-      updated: now,
-      content: data.content
-    };
     
     const filePath = getTaskPath(task.id);
     const content = serializeTask(task);
@@ -298,7 +298,7 @@ export async function createTask(
     await atomicWriteFile(filePath, content);
     
     return task;
-  } catch (error) {
+  }, 'createTask').catch(error => {
     if (error instanceof FileStoreError || error instanceof PathValidationError) {
       throw error;
     }
@@ -307,7 +307,7 @@ export async function createTask(
       'CREATE_TASK_FAILED',
       500
     );
-  }
+  });
 }
 
 /**
@@ -318,19 +318,19 @@ export async function updateTask(
   taskId: string, 
   updates: Partial<Omit<Task, 'id' | 'created'>>
 ): Promise<Task> {
-  try {
-    // Get current task
-    const currentTask = await getTask(taskId);
-    
-    // Merge updates
-    const updatedTask: Task = {
-      ...currentTask,
-      ...updates,
-      id: currentTask.id, // Preserve ID
-      created: currentTask.created, // Preserve creation date
-      updated: new Date().toISOString() // Always update timestamp
-    };
-    
+  // Get current task (with retry via getTask)
+  const currentTask = await getTask(taskId);
+  
+  // Merge updates
+  const updatedTask: Task = {
+    ...currentTask,
+    ...updates,
+    id: currentTask.id, // Preserve ID
+    created: currentTask.created, // Preserve creation date
+    updated: new Date().toISOString() // Always update timestamp
+  };
+  
+  return withRetry(async () => {
     const filePath = getTaskPath(taskId);
     const content = serializeTask(updatedTask);
     
@@ -338,7 +338,7 @@ export async function updateTask(
     await atomicWriteFile(filePath, content);
     
     return updatedTask;
-  } catch (error) {
+  }, 'updateTask').catch(error => {
     if (error instanceof FileStoreError || error instanceof PathValidationError) {
       throw error;
     }
@@ -347,14 +347,14 @@ export async function updateTask(
       'UPDATE_TASK_FAILED',
       500
     );
-  }
+  });
 }
 
 /**
  * Deletes a task by ID
  */
 export async function deleteTask(taskId: string): Promise<void> {
-  try {
+  return withRetry(async () => {
     const filePath = getTaskPath(taskId);
     
     try {
@@ -365,7 +365,7 @@ export async function deleteTask(taskId: string): Promise<void> {
       }
       throw error;
     }
-  } catch (error) {
+  }, 'deleteTask').catch(error => {
     if (error instanceof FileStoreError || error instanceof PathValidationError) {
       throw error;
     }
@@ -374,7 +374,7 @@ export async function deleteTask(taskId: string): Promise<void> {
       'DELETE_TASK_FAILED',
       500
     );
-  }
+  });
 }
 
 /**
