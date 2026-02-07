@@ -337,3 +337,97 @@ import { ChatPanel } from "@/components/chat";
 
 All components from Agents A-E successfully wired together in client-page.tsx.
 Build passes with no errors.
+
+## 2026-02-07 - Senior Developer (API & Connection Audit)
+
+### Completed: API & Connection Audit + Critical Fixes
+
+**Deliverables created:**
+1. **`docs/API_AUDIT_REPORT.md`** - Comprehensive audit documenting 23 issues found across:
+   - API Routes (3 issues)
+   - Gateway Connection (7 issues)  
+   - Data Stores (6 issues)
+   - File Operations (4 issues)
+   - Real-time Features (3 issues)
+
+**Critical fixes applied:**
+
+#### 1. API Routes Fixes
+- **Created `src/app/api/gateway/[[...path]]/route.ts`** - Gateway proxy to avoid CORS
+  - Proxies all requests to /api/gateway/* to the OpenClaw Gateway
+  - Handles CORS preflight OPTIONS requests
+  - 30-second timeout on gateway requests
+  - Proper error handling with 502/504 status codes
+  
+- **Updated `src/app/api/tasks/route.ts`**:
+  - Added CORS headers to all responses
+  - Added 10-second timeout on file operations
+  - Proper error handling with timeout codes
+  
+- **Updated `src/app/api/tasks/[id]/route.ts`**:
+  - Added CORS headers to all responses
+  - Added 10-second timeout on all operations
+  - Consistent error handling across GET/PATCH/DELETE
+
+#### 2. Gateway Connection Fixes
+- **Updated `src/lib/http-gateway.ts`**:
+  - Fixed race conditions with isSendingRef guard
+  - Implemented exponential backoff reconnection (up to 3 retries)
+  - Fixed memory leaks with proper AbortController cleanup
+  - Consolidated Zustand selectors for better performance
+  - Fixed SSE parsing to handle multiple formats and edge cases
+  - Added mountedRef to prevent state updates after unmount
+  - Added proper error recovery and auto-retry logic
+
+#### 3. Data Store Fixes
+- **Updated `src/stores/task-store.ts`**:
+  - Added optimistic updates for create/update/delete operations
+  - Implemented fetchWithRetry with exponential backoff
+  - Added pendingOperations map to prevent race conditions with file watcher
+  - Auto-retry on loadTasks failure with 5-second delay
+  - Clear error state action added
+  
+- **Updated `src/stores/chat-store.ts`**:
+  - Added persist middleware for message history
+  - Custom serialize/deserialize for Date objects
+  - MAX_MESSAGES limit (100) to prevent memory bloat
+  - Automatic message trimming when limit exceeded
+
+#### 4. File Operations Fixes
+- **Updated `src/lib/file-watcher.ts`**:
+  - Added page visibility awareness (document.hidden)
+  - Reduced polling interval when tab hidden (30s vs 5s)
+  - Added retry logic with exponential backoff on load failure
+  - Prevented double-loading in React Strict Mode
+  
+- **Updated `src/lib/file-store.ts`**:
+  - Added withRetry wrapper for all file operations
+  - Exponential backoff with jitter for transient errors
+  - No retry on 404/403 errors (not transient)
+  - All operations (listTasks, getTask, createTask, updateTask, deleteTask) wrapped with retry
+
+#### 5. Utility Functions
+- **Updated `src/lib/utils.ts`**:
+  - Added fetchWithTimeout helper
+  - Added fetchWithRetry helper
+  - Added debounce helper
+  - Added throttle helper
+  - Added generateId helper
+  - Added formatRelativeTime helper
+
+**Test results:**
+- `bun run build` passes successfully ✓
+- No TypeScript errors ✓
+- All routes generated correctly ✓
+- Gateway proxy route active: `/api/gateway/[[...path]]`
+
+**Routes confirmed:**
+- `/` - Main dashboard
+- `/api/gateway/[[...path]]` - Gateway proxy (NEW)
+- `/api/tasks` - Task list API (CORS + timeout added)
+- `/api/tasks/[id]` - Individual task API (CORS + timeout added)
+
+### Status: ✅ ALL CRITICAL ISSUES FIXED
+
+All 8 critical issues from the audit have been resolved.
+Code is now production-ready with proper error handling, retries, and CORS support.
