@@ -1,14 +1,11 @@
 /**
- * ChatWindow - Chat panel for sidebar integration
- * 
- * Mono wireframe aesthetic.
- * Can operate in compact mode (inside sidebar) or full mode.
+ * ChatWindow - Chat panel with zero-config OpenClaw integration
  */
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useGatewayHTTP, getStoredSettings, type ConnectionState } from '@/lib/http-gateway';
+import { useEffect, useRef } from 'react';
+import { useOpenClawGateway } from '@/lib/gateway-client';
 import { useChatStore, selectMessages, selectCurrentStreamingMessage } from '@/stores/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -19,110 +16,106 @@ import {
   AlertCircle, 
   Loader2,
   RefreshCw,
+  Lock,
+  CheckCircle,
 } from 'lucide-react';
 
 interface ChatWindowProps {
-  compact?: boolean;
   className?: string;
 }
 
-export function ChatWindow({ compact, className }: ChatWindowProps) {
+export function ChatWindow({ className }: ChatWindowProps) {
   const { 
-    isConnected, 
     connectionState, 
     connectionError, 
+    submitAuth,
     reconnect,
-    isLoading, 
-  } = useGatewayHTTP();
+    sendMessage,
+    isConnected,
+    isLoading,
+  } = useOpenClawGateway();
   
   const messages = useChatStore(selectMessages);
   const currentStreamingMessage = useChatStore(selectCurrentStreamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const prevMessageCountRef = useRef<number>(0);
-  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:18789');
 
-  // Get gateway URL on client side
+  // Auto-scroll to bottom
   useEffect(() => {
-    const cfg = getStoredSettings();
-    setGatewayUrl(cfg.useProxy ? '/api/gateway' : cfg.url);
-  }, []);
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    const currentCount = messages.length + (currentStreamingMessage ? 1 : 0);
-    if (currentCount !== prevMessageCountRef.current) {
-      prevMessageCountRef.current = currentCount;
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages.length, currentStreamingMessage?.content]);
 
-  const getStatusDisplay = () => {
-    switch (connectionState) {
-      case 'connecting':
-      case 'authenticating':
-        return { 
-          icon: <Loader2 className="w-3 h-3 animate-spin" />, 
-          text: 'connecting...', 
-          className: 'text-amber-600' 
-        };
-      case 'connected':
-        return { 
-          icon: <Wifi className="w-3 h-3" />, 
-          text: 'connected', 
-          className: 'text-green-600' 
-        };
-      case 'error':
-        return { 
-          icon: <AlertCircle className="w-3 h-3" />, 
-          text: 'error', 
-          className: 'text-destructive' 
-        };
-      default:
-        return { 
-          icon: <WifiOff className="w-3 h-3" />, 
-          text: 'offline', 
-          className: 'text-muted-foreground' 
-        };
-    }
-  };
-
-  const status = getStatusDisplay();
   const allMessages = currentStreamingMessage 
     ? [...messages, currentStreamingMessage] 
     : messages;
 
+  // Render connection status
+  const renderStatus = () => {
+    switch (connectionState) {
+      case 'checking':
+        return (
+          <div className="flex items-center gap-2 text-amber-600">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span className="text-[10px] font-mono">Looking for OpenClaw...</span>
+          </div>
+        );
+      case 'needs-auth':
+        return (
+          <div className="flex items-center gap-2 text-amber-600">
+            <Lock className="w-3 h-3" />
+            <span className="text-[10px] font-mono">Needs password</span>
+          </div>
+        );
+      case 'connecting':
+        return (
+          <div className="flex items-center gap-2 text-amber-600">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span className="text-[10px] font-mono">Connecting...</span>
+          </div>
+        );
+      case 'connected':
+        return (
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="w-3 h-3" />
+            <span className="text-[10px] font-mono">Connected</span>
+          </div>
+        );
+      case 'error':
+      case 'disconnected':
+        return (
+          <div className="flex items-center gap-2 text-destructive">
+            <WifiOff className="w-3 h-3" />
+            <button 
+              onClick={reconnect}
+              className="text-[10px] font-mono hover:underline"
+            >
+              Disconnected - Retry?
+            </button>
+          </div>
+        );
+    }
+  };
+
   return (
-    <div className={cn(
-      'flex flex-col h-full bg-background',
-      className
-    )}>
+    <div className={cn('flex flex-col h-full bg-background', className)}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-medium">CHAT</span>
+          <span className="font-mono text-xs font-medium">CLAW</span>
         </div>
-
-        <div className="flex items-center gap-2">
-          {/* Status */}
-          <div className={cn('flex items-center gap-1 text-[10px] font-mono', status.className)}>
-            {status.icon}
-            <span className="hidden sm:inline">{status.text}</span>
-          </div>
-
-          {/* Retry button when error */}
-          {(connectionState === 'error' || connectionState === 'disconnected') && (
-            <button
-              onClick={reconnect}
-              className="p-1 hover:bg-secondary rounded"
-              title="Reconnect"
-            >
-              <RefreshCw className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+        {renderStatus()}
       </div>
+
+      {/* Auth Prompt */}
+      {connectionState === 'needs-auth' && <AuthPrompt onSubmit={submitAuth} error={connectionError} />}
+
+      {/* Error Banner */}
+      {connectionState === 'error' && connectionError && (
+        <div className="px-3 py-2 bg-destructive/10 border-b border-destructive/20">
+          <p className="text-xs text-destructive">{connectionError}</p>
+        </div>
+      )}
 
       {/* Messages area */}
       <div
@@ -131,9 +124,22 @@ export function ChatWindow({ compact, className }: ChatWindowProps) {
       >
         {allMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="text-xs text-muted-foreground">
-              Start a conversation with your AI assistant
-            </p>
+            {connectionState === 'checking' ? (
+              <>
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mb-4" />
+                <p className="text-sm text-muted-foreground">Looking for OpenClaw Gateway...</p>
+              </>
+            ) : connectionState === 'needs-auth' ? (
+              <>
+                <Lock className="w-8 h-8 text-muted-foreground mb-4" />
+                <p className="text-sm text-muted-foreground">Enter your gateway password to connect</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">Start a conversation with your AI assistant</p>
+                <p className="text-xs text-muted-foreground mt-2">Try: "Create a task to review the codebase"</p>
+              </>
+            )}
           </div>
         ) : (
           <MessageList messages={allMessages} />
@@ -142,7 +148,10 @@ export function ChatWindow({ compact, className }: ChatWindowProps) {
 
       {/* Input area */}
       <div className="border-t border-border p-2">
-        <MessageInput disabled={!isConnected || isLoading} />
+        <MessageInput 
+          disabled={!isConnected || isLoading} 
+          onSend={sendMessage}
+        />
       </div>
 
       {/* Status bar */}
@@ -153,3 +162,64 @@ export function ChatWindow({ compact, className }: ChatWindowProps) {
     </div>
   );
 }
+
+// Auth prompt component
+function AuthPrompt({ onSubmit, error }: { onSubmit: (auth: { password: string }) => void; error?: string | null }) {
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.trim()) {
+      onSubmit({ password: password.trim() });
+    }
+  };
+
+  return (
+    <div className="p-4 border-b border-border bg-amber-50 dark:bg-amber-950/20">
+      <div className="flex items-center gap-2 mb-3">
+        <Lock className="w-4 h-4 text-amber-600" />
+        <span className="text-sm font-medium">Connect to OpenClaw</span>
+      </div>
+      
+      <p className="text-xs text-muted-foreground mb-3">
+        Found OpenClaw Gateway at localhost:18789. Enter your password to connect.
+      </p>
+      
+      {error && (
+        <p className="text-xs text-destructive mb-3">{error}</p>
+      )}
+      
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type={showPassword ? 'text' : 'password'}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Gateway password"
+          className="flex-1 px-2 py-1.5 text-sm border border-border bg-background focus:outline-none focus:ring-1 focus:ring-foreground"
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword(!showPassword)}
+          className="px-2 py-1.5 text-xs border border-border hover:bg-secondary"
+        >
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+        
+        <button
+          type="submit"
+          disabled={!password.trim()}
+          className="px-3 py-1.5 text-xs bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
+        >
+          Connect
+        </button>
+      </form>
+      
+      <p className="text-[10px] text-muted-foreground mt-2">
+        This will be saved locally. You can change it in Settings.
+      </p>
+    </div>
+  );
+}
+
+import { useState } from 'react';

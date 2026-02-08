@@ -11,19 +11,19 @@
 'use client';
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { useGatewayHTTP } from '@/lib/http-gateway';
 import { cn } from '@/lib/utils';
 import { Send, Loader2 } from 'lucide-react';
 
 interface MessageInputProps {
   disabled?: boolean;
+  isLoading?: boolean;
+  onSend?: (text: string) => void;
   className?: string;
 }
 
-export function MessageInput({ disabled, className }: MessageInputProps) {
+export function MessageInput({ disabled, isLoading = false, onSend, className }: MessageInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { sendMessage, isLoading } = useGatewayHTTP();
 
   // Handle quick prompt events from MessageList
   useEffect(() => {
@@ -35,7 +35,7 @@ export function MessageInput({ disabled, className }: MessageInputProps) {
 
     window.addEventListener('quickPrompt', handleQuickPrompt);
     return () => window.removeEventListener('quickPrompt', handleQuickPrompt);
-  }, [setText]); // setText is stable from useState
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -50,7 +50,7 @@ export function MessageInput({ disabled, className }: MessageInputProps) {
   const handleSubmit = () => {
     if (!text.trim() || disabled || isLoading) return;
 
-    sendMessage(text.trim());
+    onSend?.(text.trim());
     setText('');
 
     // Reset height
