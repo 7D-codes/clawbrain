@@ -2,66 +2,149 @@
 
 ## Vision
 
-An AI-native second brain interface powered by OpenClaw. Chat with your AI assistant, manage tasks in Kanban views, and maintain full context — all in one unified dashboard.
+An AI-native workspace for **compound engineers** — individuals who leverage AI agents as teammates to ship faster and think bigger.
 
-**The Core Idea:** When you host ClawBrain, you get a complete AI-powered workspace. Your OpenClaw instance lives inside this interface. Every task you create, every project you manage, your AI knows about it instantly. Ask "what's on my plate?" and it answers from your actual task data.
+**Phase 1:** Personal AI workspace (Chat + Kanban)  
+**Phase 2:** Multi-agent missions (War Room) — coordinate teams of specialized agents working in parallel  
+**Phase 3:** Full agency mode — autonomous agent teams with client handoffs
+
+**The Core Idea:** ClawBrain is the **OS for AI-assisted work**. One interface for you, your AI assistant, and eventually your entire AI team. When you need more firepower, spawn specialists. When you need focus, work solo. All visible, all coordinated, all in one place.
 
 ## Philosophy
 
-**OpenClaw is the brain. ClawBrain is the body.**
+**OpenClaw is the brain. ClawBrain is the body. You are the conductor.**
 
-The dashboard doesn't replace OpenClaw — it surfaces it. Files remain the source of truth, but the experience is unified: chat, tasks, and context in one place.
+The dashboard doesn't replace OpenClaw — it surfaces and orchestrates it. Files remain the source of truth, but the experience scales from personal productivity to team-level missions.
 
 ---
 
-## Core Features (MVP)
+## Core Features
 
-### 1. Integrated Chat Panel (The Brain)
+### Phase 1: Personal Workspace (Complete)
+
+#### 1. Integrated Chat Panel (The Brain)
 - Direct WebSocket connection to OpenClaw Gateway
+- **Zero-config setup** — auto-discovers local OpenClaw, one-time password entry
 - Persistent session — your AI remembers context
 - Task-manager skill pre-loaded
 - Ask about tasks: "what's due today?" → AI reads from files
-- Full OpenClaw capabilities (browser, code execution, sub-agents)
 
-### 2. Kanban Dashboard (The Body)
+#### 2. Kanban Dashboard (The Body)
 - Real-time task visualization from `~/clawdbrain/tasks/`
 - Drag-and-drop between columns (dnd-kit)
-- Views: Kanban, List
-- Status changes sync back to files (OpenClaw sees updates)
+- Status changes sync back to files
+- Clean, minimal mono-wireframe aesthetic
 
-### 3. Bidirectional Sync
+#### 3. Bidirectional Sync
 - Chat creates task → appears in Kanban instantly
 - Drag task in Kanban → OpenClaw knows on next interaction
-- File-based source of truth with real-time UI updates
-
-### 4. Self-Hosted, AI-Native
-- One install = OpenClaw + Dashboard + Task system
-- Your data, your files, your control
-- No external services required (except AI provider keys)
+- File-based source of truth
 
 ---
 
-## User Flow
+### Phase 2: War Room (In Design)
+
+**The Multi-Agent Mission Control**
+
+A dedicated space for coordinating teams of specialized AI agents working in parallel on complex missions.
+
+#### Core Concept: "The Situation Room"
+Hybrid of Mission Control's clarity, Trading Floor's energy, and Orchestra's coordination.
+
+> "Command without chaos, visibility without noise"
+
+#### Key Features
+
+**1. Agent Spawning**
+- From chat: `/spawn scout research competitors`
+- Visual confirmation: Agent card appears in grid
+- Auto-configured with role, task, and identity
+
+**2. Live Agent Grid**
+- Cards show: Avatar, name, status, progress, current action
+- 8 built-in agent types: Scout, Architect, Coder, Writer, Analyst, Designer, Guardian, Coordinator
+- Auto-grouping when >6 agents
+- Status states: Spawning → Working → Waiting → Complete → Kill
+
+**3. Activity River**
+- Real-time feed of agent communications
+- Visibility modes: Quiet / Normal / Verbose
+- Agent-to-agent handoffs with visual animations
+- Cost tracking per agent
+
+**4. Focus Mode**
+- Click any agent → Full-screen view
+- Live output stream
+- Direct chat with that agent
+- Progress history and artifacts
+
+**5. The Intern Pattern**
+```
+User: /spawn scout "research competitors"
+     ✨ Scout-7 spawning...
+     [Works in background]
+     📊 "Found 3 competitors, analysis attached"
+     State: Complete
+User: /kill scout-7
+     💀 Scout-7 archived to mission log
+```
+
+**6. Mission Templates**
+Pre-configured agent teams:
+- **Competitor Analysis:** Scout + Analyst + Writer
+- **Feature Design:** Architect + Designer + Coder
+- **Bug Hunt:** Coder + Guardian + Scout
+- **Launch Prep:** Full coordinated team
+
+#### UI Layout
 
 ```
-1. User opens ClawBrain dashboard
-2. Sees Kanban with existing tasks
-3. Types in chat: "create task: research competitors"
-4. OpenClaw creates task-{uuid}.md in ~/clawdbrain/tasks/
-5. File watcher detects change → Kanban updates instantly
-6. User drags task to "In Progress"
-7. File updates → OpenClaw sees new status on next message
-8. User asks: "what am I working on?"
-9. OpenClaw reads files, responds with current tasks
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ⚡ WAR ROOM: "Competitor Analysis Mission"                      [Exit ↗]  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────── AGENT GRID ───────────────────────────────────────────────┐ │
+│  │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐                   │ │
+│  │ │ 🕵️ Scout │ │ 🎨 Design│ │ 💻 Coder │ │ 📊 Analyst│  [+ Spawn New]  │ │
+│  │ │ [Working]│ │ [Waiting]│ │ [Complete│ │ [Working]│                   │ │
+│  │ │ ████████░│ │ ⏸ Paused │ │ ✅ Done  │ │ ██████░░░│                   │ │
+│  │ └──────────┘ └──────────┘ └──────────┘ └──────────┘                   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  ┌───────────────────── ACTIVITY RIVER ──────────────────────────────────┐ │
+│  │ 09:41:23  🕵️ Scout → 📊 Analyst: "Found pricing data, sending..."      │ │
+│  │ 09:41:20  💻 Coder: "PR #247 ready for review"                        │ │
+│  │ 09:41:15  🎨 Designer → You: "Need hero copy for this section"        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  [Command Bar]: /spawn [role] [task] | @agent | /pause all | /focus [agent] │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+#### Entry Points
+| Trigger | Action |
+|---------|--------|
+| `/warroom` | Opens empty War Room |
+| `/spawn [agent]` | Opens War Room + spawns agent |
+| "Create a team to..." | Natural language mission start |
+| Mission template | One-click pre-configured team |
+
+---
+
+### Phase 3: Agency Mode (Future)
+
+**Autonomous Agent Teams with Client Handoffs**
+
+- Persistent agent teams with memory across missions
+- Client portal for reviewing deliverables
+- Automatic reporting and status updates
+- Multi-client workspace isolation
 
 ---
 
 ## Technical Architecture
 
 ### Integration: Gateway WebSocket
-
-**How the Dashboard connects to OpenClaw:**
 
 ```
 ┌─────────────────┐      WebSocket       ┌──────────────────┐
@@ -70,7 +153,7 @@ The dashboard doesn't replace OpenClaw — it surfaces it. Files remain the sour
 │   (Next.js)     │                      │  (session mgmt)  │
 └─────────────────┘                      └──────────────────┘
          │                                         │
-         │ File I/O (via API routes)               │ Skill calls
+         │ File I/O (via API routes)               │ Agent spawning
          ▼                                         ▼
 ┌─────────────────┐                      ┌──────────────────┐
 │  ~/clawdbrain/  │ ◄──────────────────► │  OpenClaw Agent  │
@@ -78,106 +161,136 @@ The dashboard doesn't replace OpenClaw — it surfaces it. Files remain the sour
 └─────────────────┘                      └──────────────────┘
 ```
 
-**Key Design Decisions:**
-1. **Gateway WebSocket** for chat — sessions persist, auto-reconnect, built-in auth
-2. **File watching** for sync — dashboard polls/watches files, not the Gateway
-3. **Next.js API routes** for file operations — security sandbox, path validation
-4. **Files as source of truth** — both sides read/write same format
+### Multi-Agent Coordination
+
+```
+War Room Mode:
+┌─────────────┐
+│   You       │ (Conductor)
+└──────┬──────┘
+       │ Spawns
+       ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Coordinator│────▶│   Scout     │────▶│  Analyst    │
+│   (Hero)    │     │  (research) │     │  (analyze)  │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                                      │
+       │◄─────────────────────────────────────┘
+       │         Reports back
+       ▼
+┌─────────────┐
+│   Output    │
+└─────────────┘
+```
 
 ### Data Model
 
 ```
 ~/clawdbrain/
-├── tasks/
-│   └── task-{uuid}.md
+├── tasks/           # Personal tasks
+├── missions/        # War Room missions
+│   └── {mission-id}/
+│       ├── mission.yaml
+│       ├── agents/
+│       │   └── {agent-id}.yaml
+│       └── outputs/
 ├── projects/
-│   └── {project-slug}/
-│       ├── README.md
-│       └── tasks/
 ├── sessions/
-│   └── chat-history.jsonl
-└── config.yaml
-```
-
-### Task File Format
-
-```markdown
----
-id: task-uuid
-slug: research-competitors
-title: "Research competitors"
-status: todo | in-progress | done
-project: clawbrain
-created: 2026-02-05T00:00:00Z
-updated: 2026-02-05T00:00:00Z
----
-
-# Research competitors
-
-## Description
-Analyze top 3 competitors in the AI workspace market.
-
-## Acceptance Criteria
-- [ ] Identify competitors
-- [ ] Feature comparison matrix
-- [ ] Pricing analysis
+└── agents/          # Agent identity templates
+    ├── scout.yaml
+    ├── coder.yaml
+    └── ...
 ```
 
 ### Stack
 
-- **Framework:** Next.js 14 (App Router), TypeScript
-- **UI Foundation:** shadcn/ui + AI Elements (vercel/ai-elements)
-- **Styling:** Tailwind CSS with CSS Variables mode
+- **Framework:** Next.js 16 (App Router), TypeScript
+- **UI:** shadcn/ui + Tailwind CSS
 - **State:** Zustand
 - **Drag & Drop:** dnd-kit
-- **Gateway:** WebSocket connection to OpenClaw Gateway
-- **File Watching:** chokidar with debouncing
-- **Backend:** Next.js API routes (file operations with sandboxing)
+- **Gateway:** WebSocket v3 protocol
+- **Multi-Agent:** sessions_spawn for sub-agents
 
-### Design Direction
+---
 
-**Aesthetic:** Clean mono wireframe grid — architectural blueprint meets digital workspace.
+## Design Direction
 
-- **Color Palette:** Pure monochrome. Black, white, grays only.
-- **Grid System:** Visible 1px grid lines define structure
-- **Typography:** Geometric sans (Space Grotesk) + monospace (JetBrains Mono)
-- **Visual Language:** Wireframe minimalism. Borders, not shadows. Purposeful density.
-- **Motion:** Mechanical precision. Linear movements, no bounce.
+**Aesthetic:** Clean mono wireframe grid — architectural blueprint meets command center.
+
+- **Personal Mode:** Minimal, focused, calm
+- **War Room Mode:** Energetic, visible, powerful
+- **Transitions:** Smooth 400ms animations between modes
+
+---
+
+## User Flows
+
+### Personal Mode Flow
+```
+1. Open ClawBrain → Auto-detects OpenClaw
+2. Enter password once → Connected forever
+3. Chat: "create task: research competitors"
+4. Task appears in Kanban
+5. Drag to "In Progress" when ready
+```
+
+### War Room Flow
+```
+1. Chat: "/spawn scout research competitors"
+2. War Room opens with Scout card
+3. Scout finds data → Hands off to Analyst
+4. Analyst processes → Writer compiles
+5. You review final output
+6. /kill all → Mission archived
+```
 
 ---
 
 ## User Stories
 
-See `prd.json` for detailed stories with acceptance criteria and priorities.
+See `prd.json` for detailed stories.
 
----
+### War Room Stories (New)
 
-## Out of Scope (Post-MVP)
-
-- Calendar view
-- Agent assignment UI with live logs
-- Plugin store
-- One-click deploy service (ClawDeploy integration)
-- AI repair bot
-- Generative AI record editing
-- Multi-user collaboration
-- Mobile app
+| ID | Story | Priority |
+|----|-------|----------|
+| WR-001 | As a user, I want to spawn a specialized agent from chat so I can delegate parallel work | P0 |
+| WR-002 | As a user, I want to see all active agents in a grid so I can monitor their progress | P0 |
+| WR-003 | As a user, I want to click an agent to focus on it so I can see detailed output | P0 |
+| WR-004 | As a user, I want to see agent-to-agent handoffs so I understand coordination | P1 |
+| WR-005 | As a user, I want mission templates so I can spawn pre-configured teams quickly | P1 |
+| WR-006 | As a user, I want to kill agents when done so I can control costs | P0 |
 
 ---
 
 ## Success Criteria
 
-1. User sends message in chat → OpenClaw responds with context
-2. User creates task via chat → appears in Kanban within 1 second
-3. User drags task to "Done" → OpenClaw knows status on next message
-4. User asks "what are my pending tasks?" → AI responds accurately from files
-5. Self-hostable with just Node.js + OpenClaw + AI provider keys
+### Phase 1 (Complete)
+- ✅ Zero-config OpenClaw connection
+- ✅ Chat creates tasks → Kanban updates
+- ✅ Drag tasks → Status syncs
+
+### Phase 2 (War Room)
+- Spawn agent in <5 seconds
+- Track 5+ agents without overwhelm
+- Redirect any agent in <3 seconds
+- Complex missions feel faster than solo work
+
+### Phase 3 (Agency)
+- Persistent teams remember your preferences
+- Client handoff workflow
+- Autonomous reporting
 
 ---
 
 ## Brand
 
 - **Name:** ClawBrain
-- **Tagline:** Your OpenClaw, visualized
-- **Positioning:** AI-native workspace for power users
-- **License:** MIT (open source)
+- **Tagline:** Your AI team, visualized
+- **Positioning:** The OS for compound engineering
+- **License:** MIT
+
+---
+
+*Last Updated: 2026-02-09*  
+*Status: Phase 1 Complete, Phase 2 In Design*
