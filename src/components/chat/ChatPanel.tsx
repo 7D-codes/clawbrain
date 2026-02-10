@@ -11,7 +11,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useGatewayHTTP, getStoredSettings, type ConnectionState } from '@/lib/http-gateway';
+import { useOpenClawGateway, type ConnectionState } from '@/lib/gateway-client';
 import { useChatStore, selectMessages, selectCurrentStreamingMessage } from '@/stores/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -33,28 +33,30 @@ interface ChatPanelProps {
 
 export function ChatPanel({ className }: ChatPanelProps) {
   const { 
-    isConnected, 
-    connectionState, 
-    connectionError, 
-    reconnectAttempt,
-    isLoading, 
-    error, 
-    reconnect 
-  } = useGatewayHTTP();
+    connectionState,
+    connectionError,
+    isConnected,
+    sendMessage,
+    submitAuth,
+    reconnect,
+    isLoading: gatewayLoading,
+  } = useOpenClawGateway();
   
   const messages = useChatStore(selectMessages);
   const currentStreamingMessage = useChatStore(selectCurrentStreamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef<number>(0);
-  const [gatewayUrl, setGatewayUrl] = useState('http://localhost:18789');
+  const [gatewayUrl, setGatewayUrl] = useState('ws://127.0.0.1:18789');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const logsRef = useRef<HTMLDivElement>(null);
 
   // Get gateway URL on client side
   useEffect(() => {
-    const cfg = getStoredSettings();
-    setGatewayUrl(cfg.url);
+    const stored = localStorage.getItem('clawbrain_gateway_url');
+    if (stored) {
+      setGatewayUrl(stored.replace('http://', 'ws://').replace('https://', 'wss://'));
+    }
   }, []);
 
   // Capture console logs for diagnostics
@@ -107,12 +109,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
           text: 'CONNECTING...', 
           className: 'text-amber-600 border-amber-300 bg-amber-50' 
         };
-      case 'authenticating':
-        return { 
-          icon: <Loader2 className="w-3 h-3 animate-spin" />, 
-          text: 'AUTH...', 
-          className: 'text-amber-600 border-amber-300 bg-amber-50' 
-        };
       case 'connected':
         return { 
           icon: <Wifi className="w-3 h-3" />, 
@@ -125,8 +121,14 @@ export function ChatPanel({ className }: ChatPanelProps) {
           text: 'ERROR', 
           className: 'text-destructive border-destructive/50 bg-destructive/10' 
         };
+      case 'needs-auth':
+        return { 
+          icon: <AlertCircle className="w-3 h-3" />, 
+          text: 'NEEDS AUTH', 
+          className: 'text-amber-600 border-amber-300 bg-amber-50' 
+        };
       case 'disconnected':
-      case 'idle':
+      case 'checking':
       default:
         return { 
           icon: <WifiOff className="w-3 h-3" />, 
@@ -177,19 +179,8 @@ export function ChatPanel({ className }: ChatPanelProps) {
             </button>
           )}
 
-          {/* Settings */}
-          {!isConnected && (
-            <GatewaySettings 
-              className="mr-1"
-              onSave={() => {
-                setGatewayUrl(getStoredSettings().url);
-                reconnect();
-              }}
-            />
-          )}
-
           {/* Retry Button */}
-          {(connectionState === 'error' || connectionState === 'disconnected' || connectionState === 'idle') && (
+          {(connectionState === 'error' || connectionState === 'disconnected' || connectionState === 'needs-auth') && (
             <button
               onClick={reconnect}
               className="flex items-center gap-1.5 px-2 py-1 text-xs font-mono text-destructive hover:bg-destructive/10 transition-colors border border-destructive/30"
@@ -209,12 +200,17 @@ export function ChatPanel({ className }: ChatPanelProps) {
           >
             {status.icon}
             <span>{status.text}</span>
-            {reconnectAttempt > 0 && connectionState === 'connecting' && (
-              <span className="text-[10px] opacity-70">({reconnectAttempt})</span>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Auth Prompt */}
+      {connectionState === 'needs-auth' && (
+        <div className="p-4 border-b border-amber-300 bg-amber-50">
+          <p className="text-sm text-amber-800 mb-2">Gateway requires authentication</p>
+          <GatewaySettings onSave={(auth) => submitAuth(auth)} />
+        </div>
+      )}
 
       {/* Diagnostics Panel */}
       {showDiagnostics && !isConnected && (
@@ -237,16 +233,13 @@ export function ChatPanel({ className }: ChatPanelProps) {
               
               <div className="text-muted-foreground">State:</div>
               <div className="uppercase">{connectionState}</div>
-              
-              <div className="text-muted-foreground">Attempts:</div>
-              <div>{reconnectAttempt} / 10</div>
             </div>
 
             {/* Error Display */}
-            {(connectionError || error) && (
+            {connectionError && (
               <div className="border border-red-500/30 bg-red-500/10 p-2 rounded">
                 <div className="text-red-400 text-[10px] uppercase mb-1">Error:</div>
-                <div className="text-red-300">{connectionError || error}</div>
+                <div className="text-red-300">{connectionError}</div>
               </div>
             )}
 
@@ -297,7 +290,10 @@ export function ChatPanel({ className }: ChatPanelProps) {
 
       {/* Input area */}
       <div className="border-t border-border">
-        <MessageInput disabled={!isConnected || isLoading} />
+        <MessageInput 
+          onSend={sendMessage}
+          disabled={!isConnected || gatewayLoading} 
+        />
       </div>
 
       {/* Status bar */}
@@ -306,7 +302,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
           <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
             {messages.length} message{messages.length !== 1 ? 's' : ''}
           </span>
-          {isLoading && (
+          {gatewayLoading && (
             <span className="font-mono text-[10px] text-muted-foreground animate-pulse">
               ● streaming
             </span>

@@ -1,15 +1,14 @@
 /**
- * Zero-Config OpenClaw Gateway Client
+ * OpenClaw Gateway Client
  * 
- * Auto-discovers local gateway and provides seamless connection.
- * If auth is required, shows a one-time setup prompt.
+ * Based on OpenClaw Studio's battle-tested implementation.
+ * Uses native WebSocket with proper auth handshake.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useChatStore } from '@/stores/chat-store';
 
 const DEFAULT_GATEWAY_URL = 'ws://127.0.0.1:18789';
-const HTTP_HEALTH_URL = 'http://localhost:18789';
 const WS_RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
@@ -21,50 +20,59 @@ export type ConnectionState =
   | 'disconnected'  // Disconnected
   | 'error';        // Error state
 
-interface GatewayInfo {
-  url: string;
-  version?: string;
-  requiresAuth: boolean;
-}
+// Frame types matching OpenClaw protocol
+export type ReqFrame = {
+  type: 'req';
+  id: string;
+  method: string;
+  params?: unknown;
+};
 
-// Check if gateway is running via HTTP health endpoint
-async function detectGateway(): Promise<GatewayInfo | null> {
+export type ResFrame = {
+  type: 'res';
+  id: string;
+  ok: boolean;
+  payload?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+    retryable?: boolean;
+    retryAfterMs?: number;
+  };
+};
+
+export type EventFrame = {
+  type: 'event';
+  event: string;
+  payload?: unknown;
+  seq?: number;
+};
+
+export type GatewayFrame = ReqFrame | ResFrame | EventFrame;
+
+// Parse gateway frame
+const parseGatewayFrame = (raw: string): GatewayFrame | null => {
   try {
-    // Try HTTP first to detect if gateway exists
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    
-    const response = await fetch(`${HTTP_HEALTH_URL}/health`, {
-      method: 'GET',
-      signal: controller.signal,
-    }).catch(() => null);
-    
-    clearTimeout(timeout);
-    
-    if (response?.ok) {
-      const data = await response.json().catch(() => ({}));
-      return {
-        url: DEFAULT_GATEWAY_URL,
-        version: data.version,
-        requiresAuth: true, // Always assume auth needed
-      };
-    }
-    
-    // If 401, gateway is there but needs auth
-    if (response?.status === 401) {
-      return {
-        url: DEFAULT_GATEWAY_URL,
-        requiresAuth: true,
-      };
-    }
-    
-    return null;
+    return JSON.parse(raw) as GatewayFrame;
   } catch {
     return null;
   }
-}
+};
 
-// Get stored auth from localStorage
+// Generate UUID
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+// Get stored auth
 function getStoredAuth(): { token?: string; password?: string } {
   if (typeof window === 'undefined') return {};
   return {
@@ -78,6 +86,32 @@ function storeAuth(auth: { token?: string; password?: string }) {
   if (typeof window === 'undefined') return;
   if (auth.token) localStorage.setItem('clawbrain_gateway_token', auth.token);
   if (auth.password) localStorage.setItem('clawbrain_gateway_password', auth.password);
+}
+
+// Check gateway health via WebSocket
+async function detectGateway(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(url);
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve(false);
+      }, 3000);
+
+      ws.onopen = () => {
+        clearTimeout(timeout);
+        ws.close();
+        resolve(true);
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 export function useOpenClawGateway() {
@@ -94,20 +128,21 @@ export function useOpenClawGateway() {
   // Local state
   const [connectionState, setConnectionState] = useState<ConnectionState>('checking');
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [gatewayInfo, setGatewayInfo] = useState<GatewayInfo | null>(null);
+  const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY_URL);
   
   // Refs
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messageQueue = useRef<string[]>([]);
-  const currentRequestId = useRef(0);
+  const pendingRequests = useRef<Map<string, { resolve: (value: unknown) => void; reject: (err: Error) => void }>>(new Map());
   const isConnecting = useRef(false);
+  const isAuthenticated = useRef(false);
 
-  // Generate request ID
-  const getNextId = useCallback(() => {
-    currentRequestId.current += 1;
-    return String(currentRequestId.current);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      disconnect();
+    };
   }, []);
 
   // Auto-detect gateway on mount
@@ -115,34 +150,24 @@ export function useOpenClawGateway() {
     const init = async () => {
       setConnectionState('checking');
       
-      // Check if we have stored auth
       const storedAuth = getStoredAuth();
+      const isRunning = await detectGateway(gatewayUrl);
       
-      // Detect gateway
-      const info = await detectGateway();
-      
-      if (!info) {
+      if (!isRunning) {
         setConnectionState('error');
         setConnectionError('OpenClaw Gateway not found. Is it running on localhost:18789?');
         return;
       }
       
-      setGatewayInfo(info);
-      
       // If we have auth, connect directly
       if (storedAuth.token || storedAuth.password) {
-        connect(info.url, storedAuth);
+        connect(gatewayUrl, storedAuth);
       } else {
-        // Need auth
         setConnectionState('needs-auth');
       }
     };
     
     init();
-    
-    return () => {
-      disconnect();
-    };
   }, []);
 
   // WebSocket connection
@@ -152,6 +177,7 @@ export function useOpenClawGateway() {
     }
     
     isConnecting.current = true;
+    isAuthenticated.current = false;
     setConnectionState('connecting');
     setConnectionError(null);
     
@@ -161,9 +187,9 @@ export function useOpenClawGateway() {
       
       ws.onopen = () => {
         // Send connect handshake
-        const connectReq = {
+        const connectReq: ReqFrame = {
           type: 'req',
-          id: getNextId(),
+          id: generateUUID(),
           method: 'connect',
           params: {
             minProtocol: 3,
@@ -172,9 +198,12 @@ export function useOpenClawGateway() {
               id: 'clawbrain',
               version: '1.0.0',
               platform: 'web',
+              mode: 'webchat',
               displayName: 'ClawBrain',
             },
-            caps: ['agent', 'chat'],
+            role: 'operator',
+            scopes: ['operator.admin', 'operator.approvals', 'operator.pairing'],
+            caps: [],
             auth: auth.token 
               ? { token: auth.token }
               : auth.password 
@@ -187,12 +216,12 @@ export function useOpenClawGateway() {
       };
       
       ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          handleMessage(msg);
-        } catch {
+        const frame = parseGatewayFrame(String(event.data));
+        if (!frame) {
           console.error('Failed to parse gateway message:', event.data);
+          return;
         }
+        handleFrame(frame);
       };
       
       ws.onerror = (error) => {
@@ -200,20 +229,27 @@ export function useOpenClawGateway() {
         setConnectionError('Connection error');
       };
       
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         isConnecting.current = false;
+        isAuthenticated.current = false;
         setConnected(false);
         
         if (connectionState !== 'needs-auth') {
           setConnectionState('disconnected');
         }
         
-        // Auto-reconnect if not manually disconnected
+        // Reject all pending requests
+        pendingRequests.current.forEach(({ reject }) => {
+          reject(new Error('Connection closed'));
+        });
+        pendingRequests.current.clear();
+        
+        // Auto-reconnect if not manually disconnected and auth succeeded before
         if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current += 1;
           reconnectTimer.current = setTimeout(() => {
             connect(url, auth);
-          }, WS_RECONNECT_INTERVAL * reconnectAttempts.current);
+          }, WS_RECONNECT_INTERVAL * Math.min(reconnectAttempts.current, 3));
         }
       };
       
@@ -222,78 +258,125 @@ export function useOpenClawGateway() {
       setConnectionState('error');
       setConnectionError(error instanceof Error ? error.message : 'Failed to connect');
     }
-  }, [connectionState, getNextId, setConnected]);
+  }, [connectionState, setConnected]);
 
-  // Handle incoming messages
-  const handleMessage = useCallback((msg: any) => {
-    if (msg.type === 'res') {
-      // Handle response
-      if (msg.id === '1' && msg.ok) {
-        // Connect response - we're authenticated
-        setConnectionState('connected');
-        setConnected(true);
-        reconnectAttempts.current = 0;
-        
-        // Flush message queue
-        while (messageQueue.current.length > 0) {
-          const text = messageQueue.current.shift();
-          if (text) sendMessageToGateway(text);
-        }
-      } else if (!msg.ok) {
-        // Auth failed
-        if (msg.error?.code === 'UNAUTHORIZED' || msg.error?.message?.includes('auth')) {
-          setConnectionState('needs-auth');
-          setConnectionError('Authentication failed. Please enter your gateway password.');
+  // Handle incoming frames
+  const handleFrame = useCallback((frame: GatewayFrame) => {
+    if (frame.type === 'res') {
+      const pending = pendingRequests.current.get(frame.id);
+      if (pending) {
+        pendingRequests.current.delete(frame.id);
+        if (frame.ok) {
+          pending.resolve(frame.payload);
         } else {
-          setConnectionError(msg.error?.message || 'Unknown error');
+          const error = new Error(frame.error?.message || 'Request failed');
+          (error as Error & { code?: string }).code = frame.error?.code;
+          pending.reject(error);
         }
       }
-    } else if (msg.type === 'event') {
-      // Handle events (agent responses, etc.)
-      if (msg.event === 'agent') {
-        handleAgentEvent(msg.payload);
+      
+      // Handle connect response
+      if (!isAuthenticated.current) {
+        if (frame.ok) {
+          isAuthenticated.current = true;
+          setConnectionState('connected');
+          setConnected(true);
+          reconnectAttempts.current = 0;
+        } else if (frame.error?.code === 'UNAUTHORIZED' || frame.error?.message?.includes('auth')) {
+          setConnectionState('needs-auth');
+          setConnectionError('Authentication failed. Check your gateway password/token.');
+          disconnect();
+        }
       }
+    } else if (frame.type === 'event') {
+      handleEvent(frame);
     }
   }, [setConnected]);
 
-  // Handle agent events (streaming responses)
-  const handleAgentEvent = useCallback((payload: any) => {
-    if (payload.type === 'text') {
-      appendToCurrentMessage(payload.text);
-    } else if (payload.type === 'done') {
-      finalizeCurrentMessage();
-      setLoading(false);
-    } else if (payload.type === 'error') {
-      setError(payload.error || 'Agent error');
-      finalizeCurrentMessage();
-      setLoading(false);
+  // Handle events
+  const handleEvent = useCallback((event: EventFrame) => {
+    switch (event.event) {
+      case 'chat.text':
+        if (event.payload && typeof event.payload === 'object') {
+          const payload = event.payload as { text?: string; sessionKey?: string };
+          if (payload.text) {
+            appendToCurrentMessage(payload.text);
+          }
+        }
+        break;
+        
+      case 'chat.done':
+        finalizeCurrentMessage();
+        setLoading(false);
+        break;
+        
+      case 'chat.error':
+        if (event.payload && typeof event.payload === 'object') {
+          const payload = event.payload as { error?: string };
+          setError(payload.error || 'Agent error');
+        }
+        finalizeCurrentMessage();
+        setLoading(false);
+        break;
+        
+      case 'agent.status':
+        // Agent status update - could be used for War Room
+        break;
+        
+      default:
+        // Handle other events
+        break;
     }
   }, [appendToCurrentMessage, finalizeCurrentMessage, setLoading, setError]);
 
-  // Send message to gateway
+  // Make a request to the gateway
+  const request = useCallback(<T = unknown>(method: string, params?: unknown): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        reject(new Error('Gateway not connected'));
+        return;
+      }
+      
+      const id = generateUUID();
+      const frame: ReqFrame = { type: 'req', id, method, params };
+      
+      pendingRequests.current.set(id, { 
+        resolve: (value) => resolve(value as T), 
+        reject 
+      });
+      
+      // Set timeout
+      setTimeout(() => {
+        if (pendingRequests.current.has(id)) {
+          pendingRequests.current.delete(id);
+          reject(new Error('Request timeout'));
+        }
+      }, 30000);
+      
+      wsRef.current.send(JSON.stringify(frame));
+    });
+  }, []);
+
+  // Send chat message
   const sendMessageToGateway = useCallback((text: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      messageQueue.current.push(text);
+      setError('Not connected to gateway');
       return;
     }
     
-    const req = {
-      type: 'req',
-      id: getNextId(),
-      method: 'agent',
-      params: {
-        message: text,
-        agentId: 'main',
-        stream: true,
-      },
-    };
-    
-    wsRef.current.send(JSON.stringify(req));
-  }, [getNextId]);
+    request('chat.send', {
+      message: text,
+      agentId: 'main',
+      stream: true,
+    }).catch((err) => {
+      setError(err.message || 'Failed to send message');
+      finalizeCurrentMessage();
+      setLoading(false);
+    });
+  }, [request, setError, finalizeCurrentMessage, setLoading]);
 
   // Public send message function
   const sendMessage = useCallback((text: string) => {
-    // Add user message immediately
     addMessage({
       id: `user-${Date.now()}`,
       role: 'user',
@@ -303,21 +386,15 @@ export function useOpenClawGateway() {
     
     setLoading(true);
     clearError();
-    
-    // Start streaming
     startStreamingMessage();
-    
-    // Send to gateway
     sendMessageToGateway(text);
   }, [addMessage, setLoading, clearError, startStreamingMessage, sendMessageToGateway]);
 
-  // Submit auth (called from UI)
+  // Submit auth
   const submitAuth = useCallback((auth: { token?: string; password?: string }) => {
     storeAuth(auth);
-    if (gatewayInfo) {
-      connect(gatewayInfo.url, auth);
-    }
-  }, [gatewayInfo, connect]);
+    connect(gatewayUrl, auth);
+  }, [gatewayUrl, connect]);
 
   // Disconnect
   const disconnect = useCallback(() => {
@@ -331,6 +408,8 @@ export function useOpenClawGateway() {
       wsRef.current = null;
     }
     
+    isConnecting.current = false;
+    isAuthenticated.current = false;
     setConnected(false);
   }, [setConnected]);
 
@@ -338,20 +417,41 @@ export function useOpenClawGateway() {
   const reconnect = useCallback(() => {
     reconnectAttempts.current = 0;
     const storedAuth = getStoredAuth();
-    if (gatewayInfo) {
-      connect(gatewayInfo.url, storedAuth);
-    }
-  }, [gatewayInfo, connect]);
+    connect(gatewayUrl, storedAuth);
+  }, [gatewayUrl, connect]);
+
+  // Gateway API methods for War Room
+  const listAgents = useCallback(() => {
+    return request<{ agents: Array<{ id: string; name: string; model?: string }> }>('agents.list');
+  }, [request]);
+
+  const listSessions = useCallback((agentId?: string) => {
+    return request<{ sessions: Array<{ key: string; agentId: string; status: string }> }>('sessions.list', { agentId });
+  }, [request]);
+
+  const getAgentFiles = useCallback((agentId: string, path: string) => {
+    return request<string>('agents.files.get', { agentId, path });
+  }, [request]);
+
+  const setAgentFile = useCallback((agentId: string, path: string, content: string) => {
+    return request<void>('agents.files.set', { agentId, path, content });
+  }, [request]);
 
   return {
     connectionState,
     connectionError,
-    gatewayInfo,
+    gatewayUrl,
     sendMessage,
     submitAuth,
     reconnect,
     disconnect,
     isConnected: connectionState === 'connected',
     isLoading: useChatStore(useCallback((state) => state.isLoading, [])),
+    // War Room API
+    listAgents,
+    listSessions,
+    getAgentFiles,
+    setAgentFile,
+    request,
   };
 }

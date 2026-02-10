@@ -1,36 +1,31 @@
-'use client';
-
 import { useEffect, useRef, useCallback } from 'react';
 import { useTaskStore } from '@/stores/task-store';
 
-// Polling intervals
-const VISIBLE_POLL_INTERVAL = 5000; // 5 seconds when visible
-const HIDDEN_POLL_INTERVAL = 30000; // 30 seconds when hidden
+// Polling intervals - INCREASED to reduce flickering
+const VISIBLE_POLL_INTERVAL = 30000; // 30 seconds when visible (was 5 seconds)
+const HIDDEN_POLL_INTERVAL = 120000; // 2 minutes when hidden (was 30 seconds)
 
 // Client-side polling-based file watcher
 export function useFileWatcher() {
   // Use individual selector for stable reference
   const refreshFromWatcher = useTaskStore(useCallback((state) => state.refreshFromWatcher, []));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visibilityRef = useRef<boolean>(true);
+  const lastRefreshRef = useRef<number>(0);
   
-  // Debounced refresh function (300ms as per requirements)
-  // Use ref for the refresh function to avoid recreating the debounced function
-  const refreshRef = useRef(refreshFromWatcher);
-  refreshRef.current = refreshFromWatcher;
-  
+  // Debounced refresh function - only refresh if enough time has passed
   const debouncedRefresh = useCallback(async () => {
-    // Clear existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+    const now = Date.now();
+    const timeSinceLastRefresh = now - lastRefreshRef.current;
+    const minInterval = 5000; // Minimum 5 seconds between refreshes
+    
+    if (timeSinceLastRefresh < minInterval) {
+      return; // Skip if we just refreshed
     }
     
-    // Set new timeout
-    timeoutRef.current = setTimeout(async () => {
-      await refreshRef.current();
-    }, 300);
-  }, []); // No dependencies - uses ref for the actual function
+    lastRefreshRef.current = now;
+    await refreshFromWatcher();
+  }, [refreshFromWatcher]);
   
   // Handle visibility change
   useEffect(() => {
@@ -63,7 +58,6 @@ export function useFileWatcher() {
     if (typeof window === 'undefined') return;
     
     // Set up polling via API
-    // Use longer interval when tab is hidden to save resources
     const interval = visibilityRef.current ? VISIBLE_POLL_INTERVAL : HIDDEN_POLL_INTERVAL;
     
     const pollInterval = setInterval(() => {
@@ -78,10 +72,6 @@ export function useFileWatcher() {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
     };
   }, [debouncedRefresh]);
   
@@ -95,35 +85,12 @@ export function useInitializeFileWatcher() {
   // Use stable selector with useCallback
   const loadTasks = useTaskStore(useCallback((state) => state.loadTasks, []));
   const hasLoadedRef = useRef(false);
-  const retryCountRef = useRef(0);
-  const MAX_RETRIES = 3;
   
   useEffect(() => {
     // Load tasks on mount - prevent double-loading in Strict Mode
     if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      
-      const loadWithRetry = async () => {
-        try {
-          await loadTasks();
-          retryCountRef.current = 0; // Reset on success
-        } catch (error) {
-          console.error('Failed to load tasks:', error);
-          
-          // Retry with exponential backoff
-          if (retryCountRef.current < MAX_RETRIES) {
-            retryCountRef.current++;
-            const delay = 1000 * Math.pow(2, retryCountRef.current - 1);
-            console.log(`Retrying loadTasks in ${delay}ms (attempt ${retryCountRef.current})`);
-            
-            setTimeout(() => {
-              hasLoadedRef.current = false; // Allow retry
-            }, delay);
-          }
-        }
-      };
-      
-      loadWithRetry();
+      loadTasks();
     }
   }, [loadTasks]);
   

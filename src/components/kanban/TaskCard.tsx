@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Task, TaskStatus } from '@/stores/task-store';
@@ -17,7 +18,8 @@ const statusStyles: Record<TaskStatus, string> = {
   'done': 'bg-foreground',
 };
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+// Memoized component to prevent unnecessary re-renders
+export const TaskCard = memo(function TaskCard({ task, onClick }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -143,4 +145,4 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       </div>
     </div>
   );
-}
+});

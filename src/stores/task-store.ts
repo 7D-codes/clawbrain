@@ -140,9 +140,15 @@ export const useTaskStore = create<TaskState>()(
       // Clear error
       clearError: () => set({ tasksError: null }),
       
-      // Load all tasks from API
+      // Load all tasks from API - with intelligent diff updating
       loadTasks: async () => {
-        set({ loadingTasks: true, tasksError: null });
+        // Don't show loading state if we already have tasks (prevents flicker)
+        const hasExistingTasks = get().tasks.length > 0;
+        if (!hasExistingTasks) {
+          set({ loadingTasks: true });
+        }
+        set({ tasksError: null });
+        
         try {
           const response = await fetchWithRetry('/api/tasks', { method: 'GET' });
           
@@ -151,7 +157,46 @@ export const useTaskStore = create<TaskState>()(
           }
           
           const data = await response.json();
-          set({ tasks: data.tasks, loadingTasks: false, lastRefresh: Date.now() });
+          const newTasks = data.tasks;
+          
+          // Intelligent merge: only update changed tasks
+          const currentTasks = get().tasks;
+          const pendingOps = get().pendingOperations;
+          
+          // Create a map of current tasks for quick lookup
+          const currentTaskMap = new Map(currentTasks.map(t => [t.id, t]));
+          
+          // Merge new tasks with current, preserving optimistic updates
+          const mergedTasks = newTasks.map((newTask: Task) => {
+            const current = currentTaskMap.get(newTask.id);
+            
+            // If there's a pending operation on this task, keep the optimistic version
+            if (pendingOps.has(newTask.id)) {
+              return currentTasks.find(t => t.id === newTask.id) || newTask;
+            }
+            
+            // If task hasn't changed, keep current reference (prevents re-render)
+            if (current && 
+                current.status === newTask.status &&
+                current.title === newTask.title &&
+                current.updated === newTask.updated) {
+              return current;
+            }
+            
+            return newTask;
+          });
+          
+          // Add any tasks that are being created (not yet in server response)
+          const creatingTasks = currentTasks.filter(t => 
+            pendingOps.get(t.id) === 'create' && 
+            !newTasks.find((nt: Task) => nt.id === t.id)
+          );
+          
+          set({ 
+            tasks: [...mergedTasks, ...creatingTasks], 
+            loadingTasks: false, 
+            lastRefresh: Date.now() 
+          });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
           console.error('Failed to load tasks:', error);
@@ -160,12 +205,12 @@ export const useTaskStore = create<TaskState>()(
             loadingTasks: false 
           });
           
-          // Auto-retry after 5 seconds on error
+          // Auto-retry after 10 seconds on error (increased from 5)
           setTimeout(() => {
             if (get().tasksError) {
               get().loadTasks();
             }
-          }, 5000);
+          }, 10000);
         }
       },
       
@@ -342,14 +387,13 @@ export const useTaskStore = create<TaskState>()(
       
       // Refresh triggered by file watcher (debounced)
       refreshFromWatcher: async () => {
-        // Prevent rapid successive refreshes
+        // Prevent rapid successive refreshes - increased from 300ms to 2000ms
         const now = Date.now();
         const lastRefresh = get().lastRefresh;
-        if (now - lastRefresh < 300) return;
+        if (now - lastRefresh < 2000) return;
         
         // Don't refresh if there are pending operations
         if (get().pendingOperations.size > 0) {
-          console.log('Skipping refresh - pending operations');
           return;
         }
         

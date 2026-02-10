@@ -1,76 +1,83 @@
 /**
  * GatewaySettings - Configure OpenClaw Gateway connection
  * 
- * Allows users to set:
- * - Gateway URL (WebSocket endpoint)
- * - Gateway Password (for authentication)
+ * Updated for WebSocket-only OpenClaw protocol
+ * - Uses ws:// instead of http://
+ * - Stores token/password for WebSocket auth
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Settings, Check, X, Eye, EyeOff, Loader2, TestTube, Zap } from 'lucide-react';
-import { testFullConnection } from '@/lib/http-gateway';
+import { Settings, Check, X, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface GatewaySettingsProps {
   className?: string;
-  onSave?: () => void;
+  onSave?: (auth: { token?: string; password?: string }) => void;
   variant?: 'button' | 'panel';
 }
 
 // Get current settings from localStorage or defaults
 function getStoredSettings() {
   if (typeof window === 'undefined') {
-    return { url: 'http://localhost:18789', password: '', useProxy: false };
+    return { url: 'ws://127.0.0.1:18789', password: '', token: '' };
   }
-  const url = localStorage.getItem('clawbrain_gateway_url')?.replace('ws://', 'http://').replace('wss://', 'https://') || 'http://localhost:18789';
   
-  // Determine if we need to use proxy (CORS avoidance)
-  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
-  const isDifferentPort = !url.includes(window.location.host);
-  const useProxy = isLocalhost && isDifferentPort;
+  const storedUrl = localStorage.getItem('clawbrain_gateway_url') || 'ws://127.0.0.1:18789';
+  // Convert http to ws if needed
+  const url = storedUrl
+    .replace('http://', 'ws://')
+    .replace('https://', 'wss://');
   
   return {
     url,
     password: localStorage.getItem('clawbrain_gateway_password') || '',
-    useProxy,
+    token: localStorage.getItem('clawbrain_gateway_token') || '',
   };
 }
 
-// Simple HTTP test (just checks if gateway responds)
-async function testBasicConnection(url: string, useProxy = false): Promise<{ success: boolean; error?: string }> {
-  try {
-    // Use proxy to avoid CORS issues
-    const fetchUrl = useProxy ? '/api/gateway/v1/responses' : `${url}/v1/responses`;
-    const response = await fetch(fetchUrl, {
-      method: 'OPTIONS',
-    });
-    if (response.ok || response.status === 401 || response.status === 405) {
-      return { success: true };
+// Test WebSocket connection
+async function testWebSocketConnection(url: string): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(url);
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({ success: false, error: 'Connection timeout (3s)' });
+      }, 3000);
+
+      ws.onopen = () => {
+        clearTimeout(timeout);
+        ws.close();
+        resolve({ success: true });
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve({ success: false, error: 'WebSocket connection failed' });
+      };
+    } catch (err) {
+      resolve({ 
+        success: false, 
+        error: err instanceof Error ? err.message : 'Invalid WebSocket URL'
+      });
     }
-    return { success: false, error: `HTTP ${response.status}` };
-  } catch (err) {
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Connection failed - check if gateway is running' 
-    };
-  }
+  });
 }
 
 export function GatewaySettings({ className, onSave, variant = 'button' }: GatewaySettingsProps) {
   const [isOpen, setIsOpen] = useState(variant === 'panel');
-  const [url, setUrl] = useState('http://localhost:18789');
+  const [url, setUrl] = useState('ws://127.0.0.1:18789');
   const [password, setPassword] = useState('');
+  const [token, setToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testMode, setTestMode] = useState<'basic' | 'full'>('basic');
   const [testResult, setTestResult] = useState<{
     success: boolean;
-    stage?: string;
     message: string;
-    details?: string;
+    error?: string;
   } | null>(null);
 
   // Load settings on mount
@@ -78,58 +85,45 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
     const settings = getStoredSettings();
     setUrl(settings.url);
     setPassword(settings.password);
+    setToken(settings.token);
   }, []);
 
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const settings = getStoredSettings();
     
-    if (testMode === 'basic') {
-      const result = await testBasicConnection(url, settings.useProxy);
-      setTesting(false);
-      setTestResult({
-        success: result.success,
-        message: result.success 
-          ? '✅ Gateway reachable' 
-          : `❌ ${result.error}`,
-        details: result.success 
-          ? 'Gateway responds to HTTP. Try "Full Test" to verify auth.' 
-          : 'Gateway is not accepting HTTP connections.'
-      });
-    } else {
-      // Full test with auth
-      const settings = getStoredSettings();
-      const result = await testFullConnection(url, password, settings.useProxy);
-      setTesting(false);
-      setTestResult({
-        success: result.success,
-        stage: result.stage,
-        message: result.success 
-          ? '✅ Full connection successful!' 
-          : `❌ Failed at ${result.stage} stage`,
-        details: result.details || result.error
-      });
-    }
+    const result = await testWebSocketConnection(url);
+    
+    setTesting(false);
+    setTestResult({
+      success: result.success,
+      message: result.success 
+        ? '✅ Gateway WebSocket reachable' 
+        : '❌ Connection failed',
+      error: result.error
+    });
   };
 
   const handleSave = () => {
     localStorage.setItem('clawbrain_gateway_url', url);
     localStorage.setItem('clawbrain_gateway_password', password);
+    localStorage.setItem('clawbrain_gateway_token', token);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     
-    onSave?.();
+    onSave?.({ token: token || undefined, password: password || undefined });
     
-    // Reload page to apply new settings
-    window.location.reload();
+    if (variant !== 'panel') {
+      setIsOpen(false);
+    }
   };
 
   const handleCancel = () => {
     const settings = getStoredSettings();
     setUrl(settings.url);
     setPassword(settings.password);
+    setToken(settings.token);
     setTestResult(null);
     if (variant !== 'panel') {
       setIsOpen(false);
@@ -158,7 +152,11 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
 
   // Panel variant or expanded button variant
   return (
-    <div className={cn('flex flex-col gap-3', variant === 'button' && 'p-4 border border-border bg-background min-w-[340px] max-w-[400px]', className)}>
+    <div className={cn(
+      'flex flex-col gap-3', 
+      variant === 'button' && 'p-4 border border-border bg-background min-w-[340px] max-w-[400px]', 
+      className
+    )}>
       {variant === 'button' && (
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-foreground">Gateway Settings</span>
@@ -183,7 +181,7 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
             setUrl(e.target.value);
             setTestResult(null);
           }}
-          placeholder="ws://localhost:18789"
+          placeholder="ws://127.0.0.1:18789"
           className={cn(
             'px-3 py-2 text-xs font-mono',
             'border border-border bg-background',
@@ -192,14 +190,14 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
           )}
         />
         <p className="text-[10px] text-muted-foreground">
-          Format: ws://host:port or wss://host:port
+          Format: ws://host:port (or wss:// for secure)
         </p>
       </div>
 
       {/* Password Input */}
       <div className="flex flex-col gap-1.5">
         <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-          Password (optional)
+          Password
         </label>
         <div className="relative">
           <input
@@ -209,7 +207,7 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
               setPassword(e.target.value);
               setTestResult(null);
             }}
-            placeholder="Enter gateway password"
+            placeholder="Gateway password (if required)"
             className={cn(
               'w-full px-3 py-2 text-xs font-mono',
               'border border-border bg-background',
@@ -226,40 +224,30 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
         </div>
       </div>
 
-      {/* Test Mode Toggle */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => { setTestMode('basic'); setTestResult(null); }}
+      {/* Token Input (optional) */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+          Auth Token (optional)
+        </label>
+        <input
+          type="text"
+          value={token}
+          onChange={(e) => {
+            setToken(e.target.value);
+            setTestResult(null);
+          }}
+          placeholder="Bearer token (if using token auth)"
           className={cn(
-            'flex-1 px-3 py-1.5 text-[10px] font-mono uppercase',
-            'border transition-colors',
-            testMode === 'basic'
-              ? 'bg-foreground text-background border-foreground'
-              : 'border-border text-muted-foreground hover:text-foreground'
+            'px-3 py-2 text-xs font-mono',
+            'border border-border bg-background',
+            'focus:outline-none focus:border-foreground',
+            'text-foreground placeholder:text-muted-foreground'
           )}
-        >
-          Basic
-        </button>
-        <button
-          onClick={() => { setTestMode('full'); setTestResult(null); }}
-          className={cn(
-            'flex-1 px-3 py-1.5 text-[10px] font-mono uppercase',
-            'border transition-colors',
-            testMode === 'full'
-              ? 'bg-foreground text-background border-foreground'
-              : 'border-border text-muted-foreground hover:text-foreground'
-          )}
-        >
-          Full
-        </button>
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Use either password OR token, not both
+        </p>
       </div>
-
-      {/* Test Description */}
-      <p className="text-[10px] text-muted-foreground">
-        {testMode === 'basic' 
-          ? 'Basic: Only checks if WebSocket opens (no auth)' 
-          : 'Full: Tests complete flow including auth & session join'}
-      </p>
 
       {/* Test Button */}
       <button
@@ -270,9 +258,7 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
           'text-xs font-mono border transition-colors',
           testing 
             ? 'border-border text-muted-foreground' 
-            : testMode === 'full'
-              ? 'border-amber-500 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-              : 'border-foreground text-foreground hover:bg-foreground hover:text-background'
+            : 'border-foreground text-foreground hover:bg-foreground hover:text-background'
         )}
       >
         {testing ? (
@@ -280,16 +266,8 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
             <Loader2 className="w-3 h-3 animate-spin" />
             <span>Testing...</span>
           </>
-        ) : testMode === 'full' ? (
-          <>
-            <Zap className="w-3 h-3" />
-            <span>Test Full</span>
-          </>
         ) : (
-          <>
-            <TestTube className="w-3 h-3" />
-            <span>Test Basic</span>
-          </>
+          <span>Test Connection</span>
         )}
       </button>
 
@@ -302,15 +280,8 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
             : 'border border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400'
         )}>
           <div className="font-medium">{testResult.message}</div>
-          {testResult.stage && (
-            <div className="text-[10px] uppercase opacity-70">
-              Stage: {testResult.stage}
-            </div>
-          )}
-          {testResult.details && (
-            <div className="text-[10px] mt-1 opacity-90 border-t border-current/20 pt-1">
-              {testResult.details}
-            </div>
+          {testResult.error && (
+            <div className="text-[10px] opacity-80">{testResult.error}</div>
           )}
         </div>
       )}
@@ -330,7 +301,7 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
         {saved ? (
           <>
             <Check className="w-3 h-3" />
-            <span>Saved - Reloading...</span>
+            <span>Saved!</span>
           </>
         ) : (
           <span>Save & Connect</span>
@@ -340,11 +311,12 @@ export function GatewaySettings({ className, onSave, variant = 'button' }: Gatew
       {/* Help Text */}
       <div className="space-y-1.5 pt-2 border-t border-border">
         <p className="text-[10px] font-mono text-muted-foreground">
-          Default: http://localhost:18789
+          Default: ws://127.0.0.1:18789
         </p>
         <div className="text-[10px] text-muted-foreground space-y-0.5">
-          <p>• If Basic passes but Full fails → Check password</p>
-          <p>• If both fail → Gateway not running or wrong URL</p>
+          <p>• Test checks if gateway WebSocket is reachable</p>
+          <p>• Password/token sent during actual connection</p>
+          <p>• Check your openclaw.json for auth settings</p>
         </div>
       </div>
     </div>

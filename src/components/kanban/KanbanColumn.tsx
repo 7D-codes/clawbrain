@@ -11,6 +11,7 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   onTaskClick?: (task: Task) => void;
+  isActive?: boolean;
 }
 
 // Status indicator for column header - using semantic colors
@@ -20,7 +21,7 @@ const statusIndicator: Record<TaskStatus, string> = {
   'done': 'bg-foreground',
 };
 
-export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, onTaskClick, isActive }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id,
     data: {
@@ -98,7 +99,7 @@ export function KanbanColumn({ id, title, tasks, onTaskClick }: KanbanColumnProp
           'flex flex-col gap-3',
           
           // Drop target styling
-          isOver && [
+          (isOver || isActive) && [
             'bg-accent/50',
             'outline outline-1 outline-border-strong outline-offset-[-1px]',
           ]

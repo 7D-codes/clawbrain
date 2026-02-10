@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -30,30 +30,56 @@ const COLUMNS: { id: TaskStatus; title: string }[] = [
 ];
 
 export function KanbanBoard() {
-  // Store state
+  // Store state - use individual selectors to prevent unnecessary re-renders
   const tasks = useTaskStore(state => state.tasks);
   const loadingTasks = useTaskStore(state => state.loadingTasks);
   const tasksError = useTaskStore(state => state.tasksError);
   const updateTask = useTaskStore(state => state.updateTask);
   const loadTasks = useTaskStore(state => state.loadTasks);
+  const pendingOperations = useTaskStore(state => state.pendingOperations);
   
-  // Local state for drag operations
+  // Local state for drag operations ONLY (optimistic updates during drag)
   const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   
-  // Initialize file watcher
+  // Initialize file watcher (now with longer intervals)
   useInitializeFileWatcher();
   
-  // Sync local tasks with store
-  useEffect(() => {
-    setLocalTasks(tasks);
-  }, [tasks]);
+  // Memoized task counts by status - only recalculates when tasks change
+  const taskCounts = useMemo(() => ({
+    todo: tasks.filter(task => task.status === 'todo').length,
+    'in-progress': tasks.filter(task => task.status === 'in-progress').length,
+    done: tasks.filter(task => task.status === 'done').length,
+  }), [tasks]);
+
+  // Get tasks by status - memoized to prevent recalculation
+  const tasksByStatus = useMemo(() => {
+    const byStatus: Record<TaskStatus, Task[]> = {
+      todo: [],
+      'in-progress': [],
+      done: []
+    };
+    
+    for (const task of tasks) {
+      // Skip tasks being deleted
+      if (pendingOperations.get(task.id) === 'delete') continue;
+      
+      // Apply optimistic status updates during drag
+      if (dragOverStatus && activeTask?.id === task.id) {
+        byStatus[dragOverStatus].push({ ...task, status: dragOverStatus });
+      } else {
+        byStatus[task.status].push(task);
+      }
+    }
+    
+    return byStatus;
+  }, [tasks, pendingOperations, dragOverStatus, activeTask]);
   
   // Configure sensors for drag detection
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // Minimum drag distance before activation
+        distance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -61,71 +87,54 @@ export function KanbanBoard() {
     })
   );
   
-  // Memoized task counts by status
-  const taskCounts = useMemo(() => ({
-    todo: localTasks.filter(task => task.status === 'todo').length,
-    'in-progress': localTasks.filter(task => task.status === 'in-progress').length,
-    done: localTasks.filter(task => task.status === 'done').length,
-  }), [localTasks]);
-
-  // Get tasks by status - memoized to prevent recalculation
-  const tasksByStatus = useMemo(() => {
-    return (status: TaskStatus) => localTasks.filter(task => task.status === status);
-  }, [localTasks]);
-  
   // Handle drag start
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
     const taskId = active.id as string;
-    const task = localTasks.find(t => t.id === taskId);
+    const task = tasks.find(t => t.id === taskId);
     if (task) {
       setActiveTask(task);
     }
-  }, [localTasks]);
+  }, [tasks]);
   
   // Handle drag over (for visual feedback during drag)
   const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { active, over } = event;
+    const { over } = event;
+    if (!over) {
+      setDragOverStatus(null);
+      return;
+    }
     
-    if (!over) return;
-    
-    const activeId = active.id as string;
     const overId = over.id as string;
-    
-    if (activeId === overId) return;
     
     // Check if dragging over a column
     const overColumn = COLUMNS.find(col => col.id === overId);
-    
     if (overColumn) {
-      // Update task status optimistically
-      setLocalTasks(prev => {
-        const taskIndex = prev.findIndex(t => t.id === activeId);
-        if (taskIndex === -1) return prev;
-        
-        const newTasks = [...prev];
-        newTasks[taskIndex] = {
-          ...newTasks[taskIndex],
-          status: overColumn.id,
-        };
-        return newTasks;
-      });
+      setDragOverStatus(overColumn.id);
+      return;
     }
-  }, []); // setLocalTasks is stable from useState
+    
+    // Check if dragging over another task
+    const targetTask = tasks.find(t => t.id === overId);
+    if (targetTask) {
+      setDragOverStatus(targetTask.status);
+    }
+  }, [tasks]);
   
   // Handle drag end (commit changes)
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     
     setActiveTask(null);
+    setDragOverStatus(null);
     
     if (!over) return;
     
     const activeId = active.id as string;
-    const overId = over.id as string;
     
     // Find the target status
     let targetStatus: TaskStatus | null = null;
+    const overId = over.id as string;
     
     // Check if dropped on a column
     const targetColumn = COLUMNS.find(col => col.id === overId);
@@ -133,7 +142,7 @@ export function KanbanBoard() {
       targetStatus = targetColumn.id;
     } else {
       // Check if dropped on another task
-      const targetTask = localTasks.find(t => t.id === overId);
+      const targetTask = tasks.find(t => t.id === overId);
       if (targetTask) {
         targetStatus = targetTask.status;
       }
@@ -142,22 +151,18 @@ export function KanbanBoard() {
     if (!targetStatus) return;
     
     // Find the dragged task
-    const draggedTask = localTasks.find(t => t.id === activeId);
+    const draggedTask = tasks.find(t => t.id === activeId);
     if (!draggedTask) return;
     
     // Only update if status changed
     if (draggedTask.status !== targetStatus) {
       try {
-        // Optimistic update already done in handleDragOver
-        // Now commit to server
         await updateTask(activeId, { status: targetStatus });
       } catch (error) {
         console.error('Failed to update task status:', error);
-        // Revert on error
-        await loadTasks();
       }
     }
-  }, [localTasks, updateTask, loadTasks]);
+  }, [tasks, updateTask]);
   
   // Drop animation configuration
   const dropAnimation: DropAnimation = {
@@ -171,11 +176,10 @@ export function KanbanBoard() {
   };
   
   // Loading state
-  if (loadingTasks && localTasks.length === 0) {
+  if (loadingTasks && tasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-4">
-          {/* Wireframe loading indicator */}
           <div className="flex gap-1">
             {[0, 1, 2].map(i => (
               <div
@@ -238,7 +242,7 @@ export function KanbanBoard() {
             Tasks
           </h1>
           <span className="text-xs font-mono text-muted-foreground">
-            {localTasks.length} total
+            {tasks.length} total
           </span>
         </div>
         
@@ -274,7 +278,8 @@ export function KanbanBoard() {
                 key={column.id}
                 id={column.id}
                 title={column.title}
-                tasks={tasksByStatus(column.id)}
+                tasks={tasksByStatus[column.id]}
+                isActive={dragOverStatus === column.id}
               />
             ))}
           </div>
