@@ -1,0 +1,218 @@
+# ClawBrain Development Progress
+
+## 2026-02-06 - UI/UX Fixes
+
+### 1. Constant Refreshing / Re-render Loops
+**Problem:** `http-gateway.ts` connection test was running on every render due to `setConnected` in dependency array.
+
+**Fix:** Added mount guard, run only once on mount with empty dependency array.
+
+### 2. Bot Messages Not Rendering
+**Problem:** `AssistantContent` component had broken code block parsing.
+
+**Fix:** Rewrote with proper code block handling, inline code support, and "Thinking..." placeholder.
+
+### 3. UI Clutter - Too Many Panels
+**Fix:** Simplified to single sidebar containing chat + navigation, cleaned up header.
+
+### 4. Spammy File Watcher Logs
+**Fix:** Removed the `[FileWatcher] Detected file change` console log.
+
+---
+
+## 2026-02-07 - SEO, Accessibility, Security Improvements
+
+### SEO Enhancements
+- Added comprehensive metadata with Open Graph and Twitter cards
+- Added metadataBase for proper URL resolution  
+- Created robots.txt with crawl rules
+- Created sitemap.xml
+- Added viewport configuration with theme colors
+
+### Accessibility Improvements
+- Added semantic HTML elements (main, aside, nav, header, banner)
+- Added aria-labels and aria-expanded to interactive elements
+- Added aria-hidden to decorative icons
+- Added proper form labels
+
+### Security Headers
+- Added HSTS, X-Frame-Options, CSP, X-Content-Type-Options
+- Added Referrer Policy and Permissions Policy
+- Added DNS prefetch control
+
+### UX Additions
+- Created custom 404 not-found page
+- Improved sidebar with proper ARIA attributes
+
+---
+
+## 2026-02-07 - API & Connection Layer Audit
+
+### Gateway Connection Improvements
+**Issues Found:**
+- No health check polling - connection could drop silently
+- No exponential backoff for reconnection
+- Race condition in message streaming
+- No connection timeout handling
+
+**Fixes Applied:**
+- Added health check polling every 30 seconds
+- Added exponential backoff (1s → 30s max)
+- Fixed streaming race condition - start message before fetch
+- Added 5 second connection timeout
+- Added 'not connected' guard for sendMessage
+- Track reconnection attempts
+
+### Task Store Improvements
+- Added optimistic update with rollback on error
+- Store previous state and restore if API fails
+- Better error messages from API response
+
+### File Watcher Optimization
+- Reduced debounce from 300ms to 100ms for faster response
+- Removed double-debounce issue with task store
+
+### Gateway Proxy Route
+- Fixed TypeScript type error for optional path params
+- Added 30 second timeout for gateway requests
+- Better error handling with timeout-specific messages
+
+### Documentation
+- Created comprehensive `API_AUDIT_REPORT.md`
+- Created `AUDIT_REPORT.md` for UI/SEO findings
+
+---
+
+## Status
+
+### Fixed
+- ✅ UI clutter and layout issues
+- ✅ Constant re-rendering
+- ✅ Bot message rendering
+- ✅ SEO meta tags and social sharing
+- ✅ Accessibility (semantic HTML, ARIA)
+- ✅ Security headers
+- ✅ Gateway connection stability
+- ✅ Task optimistic updates with rollback
+- ✅ API type errors
+
+### Remaining (Lower Priority)
+- Rate limiting on API endpoints
+- API request timeouts on file operations
+- Surface file parse errors to user
+- Add analytics
+- Core Web Vitals monitoring
+
+---
+
+## 2026-02-09 - Fixed Gateway Connection (CRITICAL)
+
+### Problem
+ClawBrain was using HTTP `/v1/responses` endpoint which **doesn't exist** in OpenClaw. Gateway connection was failing with "not found" errors.
+
+### Root Cause
+OpenClaw Gateway only speaks **WebSocket** with its own protocol. The HTTP approach was wrong.
+
+### Solution
+Replaced entire connection layer based on **OpenClaw Studio's** battle-tested implementation:
+
+**Files Changed:**
+1. `src/lib/gateway-client.ts` - Complete rewrite with proper WebSocket protocol
+2. `src/components/chat/ChatPanel.tsx` - Updated to use new hook
+3. `src/components/chat/GatewaySettings.tsx` - Updated for WebSocket auth
+4. `src/app/test-gateway/page.tsx` - New test page for debugging
+
+**Key Changes:**
+- Native WebSocket connection to `ws://127.0.0.1:18789`
+- Proper `connect` handshake with `minProtocol: 3, maxProtocol: 3`
+- Auth via password or token in handshake
+- Request/response frame handling with UUIDs
+- Event handling for streaming chat responses
+- Added War Room API methods: `listAgents`, `listSessions`, `getAgentFiles`
+
+**Protocol Frame Format:**
+```json
+{"type": "req", "id": "uuid", "method": "connect", "params": {...}}
+{"type": "res", "id": "uuid", "ok": true, "payload": {...}}
+{"type": "event", "event": "chat.text", "payload": {...}}
+```
+
+### Testing
+Created `/test-gateway` page to verify:
+- WebSocket connection
+- Authentication
+- Agent listing
+- Session listing
+
+---
+
+## 2026-02-10 - Fixed UI Flickering & Sync Issues (CRITICAL)
+
+### Problem 1: Task Flickering
+**Symptoms:** Tasks flicker, columns flash, UI feels janky during drag-drop
+
+**Root Cause:** KanbanBoard maintained separate `localTasks` state that synced from store on every poll:
+```typescript
+// BAD: This causes flicker on every poll
+const [localTasks, setLocalTasks] = useState<Task[]>([]);
+useEffect(() => {
+  setLocalTasks(tasks); // Replaces entire array → re-render
+}, [tasks]);
+```
+
+**Fix:** Remove local state duplication, use store directly with memoization:
+- KanbanBoard now reads `tasks` directly from store
+- Uses `useMemo` for `tasksByStatus` calculation
+- Optimistic updates handled via `pendingOperations` + `dragOverStatus`
+
+### Problem 2: Aggressive Polling
+**Symptoms:** Constant "Syncing..." indicator, unnecessary API calls
+
+**Root Cause:** File watcher polled every 5 seconds (300ms debounce)
+
+**Fix:** Increased polling intervals significantly:
+- **Visible:** 5s → 30 seconds
+- **Hidden tab:** 30s → 2 minutes
+- **Debounced refresh:** 300ms → 2000ms minimum between refreshes
+
+### Problem 3: Full Array Replacement
+**Symptoms:** All cards re-render even when nothing changed
+
+**Root Cause:** `loadTasks()` replaced entire tasks array every poll
+
+**Fix:** Intelligent diff-based updates in task-store:
+- Compares each task's properties
+- Preserves existing references for unchanged tasks
+- Preserves optimistic updates during pending operations
+- Skips tasks that haven't changed (React won't re-render)
+
+### Problem 4: No Component Memoization
+**Symptoms:** Every card re-renders when any task updates
+
+**Fix:** Wrapped TaskCard in `React.memo()`:
+```typescript
+export const TaskCard = memo(function TaskCard({ task, onClick }) {
+  // Now only re-renders when this specific task changes
+});
+```
+
+### Files Changed
+1. `src/components/kanban/KanbanBoard.tsx` - Removed local state, direct store usage
+2. `src/components/kanban/KanbanColumn.tsx` - Added `isActive` prop for drag feedback
+3. `src/components/kanban/TaskCard.tsx` - Wrapped in React.memo
+4. `src/lib/file-watcher.ts` - Reduced polling frequency
+5. `src/stores/task-store.ts` - Intelligent task merging
+
+### Testing
+- Drag-drop should now be smooth without flickering
+- Cards should not re-render unnecessarily
+- "Syncing..." indicator appears much less frequently
+- Status changes via drag should feel instant
+
+---
+
+## Next Steps
+1. Test full chat flow end-to-end
+2. Test kanban drag-and-drop with API
+3. Deploy to staging for testing
+4. Add monitoring/logging

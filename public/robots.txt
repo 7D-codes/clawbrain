@@ -1,0 +1,22 @@
+# ClawBrain - AI Task Workspace
+# https://clawbrain.app
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://clawbrain.app/sitemap.xml
+
+# Crawl rate for major bots
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+# Block development and staging
+User-agent: *
+Disallow: /api/
+Disallow: /_next/

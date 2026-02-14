@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/search/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/Users/mac/Projects/clawbrain/":[],"/Users/mac/Projects/clawbrain/app/api/search/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}
